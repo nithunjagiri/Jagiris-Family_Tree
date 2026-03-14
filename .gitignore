@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Environment (do not commit credentials)
+.env
+.env.local
+.env.*.local
+
+# Build / logs
+dist/
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Uploads (optional: remove if you want to track uploads)
+backend/uploads/
