@@ -99,7 +99,8 @@ async function validateFamilyRelations(client, { familyId, memberId, fatherId, m
 
 exports.list = async (req, res, next) => {
   try {
-    const familyId = req.familyId;
+    const familyId = 1; // TEMP FIX
+
     const result = await db.query(
       `SELECT ${COLS}
        FROM family_members fm
@@ -108,15 +109,16 @@ exports.list = async (req, res, next) => {
        LEFT JOIN users uc ON uc.id::text = NULLIF(TRIM(fm.created_by::text), '')
        LEFT JOIN users uu ON uu.id::text = NULLIF(TRIM(fm.updated_by::text), '')
        WHERE fm.family_id = $1
-       ORDER BY fm.name, fm.surname NULLS LAST, fm.id`
-      ,
+       ORDER BY fm.name, fm.surname NULLS LAST, fm.id`,
       [familyId]
     );
+
     res.json(result.rows);
   } catch (err) {
     next(err);
   }
 };
+
 
 exports.get = async (req, res, next) => {
   try {
