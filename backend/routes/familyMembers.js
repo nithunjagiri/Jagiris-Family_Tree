@@ -7,7 +7,7 @@ const { resolveFamilyContext } = require('../lib/familyAccess');
 const router = express.Router();
 
 // router.use(auth);  // disabled for now
-router.use(resolveFamilyContext);
+//router.use(resolveFamilyContext);// disabled for now
 
 router.get('/', familyMembersController.list);
 router.get('/:id', familyMembersController.get);
