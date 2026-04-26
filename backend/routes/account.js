@@ -4,7 +4,7 @@ const accountController = require('../controllers/accountController');
 const { resolveFamilyContext } = require('../lib/familyAccess');
 
 const router = express.Router();
-router.use(auth);
+//router.use(auth);// disable after deploy
 router.use(resolveFamilyContext);
 
 router.get('/privacy', accountController.getPrivacySettings);
