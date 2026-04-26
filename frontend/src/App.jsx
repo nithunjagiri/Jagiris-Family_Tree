@@ -1,9 +1,13 @@
+import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import Dashboard from './pages/Dashboard';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
+
+const Dashboard = lazy(() => import('./pages/Dashboard'));
 import FamilyMembers from './pages/FamilyMembers';
 import AddMemberForm from './pages/AddMemberForm';
 import PhotoGallery from './pages/PhotoGallery';
@@ -11,6 +15,15 @@ import UploadPhotoForm from './pages/UploadPhotoForm';
 import Events from './pages/Events';
 import FamilyTree from './pages/FamilyTree';
 import MemberProfile from './pages/MemberProfile';
+import PlacesMap from './pages/PlacesMap';
+import GlobalSearch from './pages/GlobalSearch';
+import AccountPrivacy from './pages/AccountPrivacy';
+import ContactUs from './pages/ContactUs';
+import AdminAudit from './pages/AdminAudit';
+import AdminUsers from './pages/AdminUsers';
+import AdminUserEdit from './pages/AdminUserEdit';
+import AdminUserCreate from './pages/AdminUserCreate';
+import AdminPortalLayout from './components/AdminPortalLayout';
 
 function PrivateRoute({ children }) {
   const { isAuth, loading } = useAuth();
@@ -31,11 +44,26 @@ function PrivateRoute({ children }) {
   return children;
 }
 
+function AdminRoute({ children }) {
+  const { isAdmin, loading, isAuth } = useAuth();
+  if (loading || !isAuth) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <div className="h-9 w-9 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
+      </div>
+    );
+  }
+  if (!isAdmin) return <Navigate to="/" replace />;
+  return children;
+}
+
 export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route
         path="/"
         element={
@@ -44,7 +72,20 @@ export default function App() {
           </PrivateRoute>
         }
       >
-        <Route index element={<Dashboard />} />
+        <Route
+          index
+          element={
+            <Suspense
+              fallback={
+                <div className="flex min-h-[40vh] items-center justify-center">
+                  <div className="h-9 w-9 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
+                </div>
+              }
+            >
+              <Dashboard />
+            </Suspense>
+          }
+        />
         <Route path="family-members" element={<FamilyMembers />} />
         <Route path="family-members/add" element={<AddMemberForm />} />
         <Route path="family-members/edit/:id" element={<AddMemberForm />} />
@@ -53,6 +94,24 @@ export default function App() {
         <Route path="gallery/upload" element={<UploadPhotoForm />} />
         <Route path="events" element={<Events />} />
         <Route path="family-tree" element={<FamilyTree />} />
+        <Route path="places" element={<PlacesMap />} />
+        <Route path="search" element={<GlobalSearch />} />
+        <Route path="contact" element={<ContactUs />} />
+        <Route path="account" element={<AccountPrivacy />} />
+        <Route
+          path="admin"
+          element={
+            <AdminRoute>
+              <AdminPortalLayout />
+            </AdminRoute>
+          }
+        >
+          <Route index element={<Navigate to="users" replace />} />
+          <Route path="users/new" element={<AdminUserCreate />} />
+          <Route path="users/:id/edit" element={<AdminUserEdit />} />
+          <Route path="users" element={<AdminUsers />} />
+          <Route path="audit" element={<AdminAudit />} />
+        </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

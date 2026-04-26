@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Pencil, User, Mail, Phone, MapPin, Briefcase, Calendar } from 'lucide-react';
+import { ArrowLeft, Pencil, User, Users, Mail, Phone, MessageCircle, MapPin, Briefcase, Calendar, Activity } from 'lucide-react';
 import { familyMembersApi } from '../services/api';
+import { formatCalendarLong } from '../lib/calendarDate';
+import { HIDE_RELATION_NAMES_IN_UI } from '../lib/appDisplaySettings';
 
 function Field({ icon: Icon, label, value }) {
   if (value == null || value === '') return null;
@@ -16,19 +18,50 @@ function Field({ icon: Icon, label, value }) {
   );
 }
 
+function spouseDisplayName(s) {
+  if (!s) return '';
+  return [s.name, s.surname].filter(Boolean).join(' ') || s.name || '';
+}
+
 export default function MemberProfile() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [member, setMember] = useState(null);
+  const [spouse, setSpouse] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    familyMembersApi
-      .get(id)
-      .then((r) => setMember(r.data))
-      .catch(() => setError('Member not found'))
-      .finally(() => setLoading(false));
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      setError('');
+      setMember(null);
+      setSpouse(null);
+      try {
+        const r = await familyMembersApi.get(id);
+        if (cancelled) return;
+        const m = r.data;
+        setMember(m);
+        const sid = m?.spouse_id;
+        if (sid != null && String(sid).trim() !== '') {
+          try {
+            const sr = await familyMembersApi.get(sid);
+            if (!cancelled) setSpouse(sr.data);
+          } catch {
+            if (!cancelled) setSpouse(null);
+          }
+        }
+      } catch {
+        if (!cancelled) setError('Member not found');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   if (loading) {
@@ -55,6 +88,8 @@ export default function MemberProfile() {
   }
 
   const fullName = [member.name, member.surname].filter(Boolean).join(' ') || member.name;
+  const birthPlace = member.birth_place_name || member.birth_place || null;
+  const currentCity = member.residence_place_name || member.residence_place || null;
 
   return (
     <div className="w-full max-w-none">
@@ -90,26 +125,61 @@ export default function MemberProfile() {
             </div>
             <div className="text-center sm:text-left">
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{fullName}</h1>
-              {member.relation && (
+              {!HIDE_RELATION_NAMES_IN_UI && member.relation ? (
                 <p className="text-primary-600 dark:text-primary-400">{member.relation}</p>
-              )}
+              ) : null}
             </div>
           </div>
         </div>
         <div className="p-6">
           <div className="grid gap-6 sm:grid-cols-2">
             <Field icon={User} label="Gender" value={member.gender} />
-            <Field icon={Calendar} label="Date of birth" value={member.date_of_birth ? new Date(member.date_of_birth).toLocaleDateString() : null} />
-            <Field icon={Calendar} label="Date of death" value={member.date_of_death ? new Date(member.date_of_death).toLocaleDateString() : null} />
+            {spouse && (
+              <div className="flex gap-3">
+                <Users className="mt-0.5 h-5 w-5 shrink-0 text-primary-500" />
+                <div>
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Spouse</p>
+                  <Link
+                    to={`/family-members/${spouse.id}`}
+                    className="font-medium text-primary-600 hover:underline dark:text-primary-400"
+                  >
+                    {spouseDisplayName(spouse)}
+                  </Link>
+                </div>
+              </div>
+            )}
+            <Field
+              icon={Activity}
+              label="Living status"
+              value={(() => {
+                const deceased =
+                  member.is_alive === false ||
+                  (typeof member.is_alive === 'string' && member.is_alive.trim().toLowerCase() === 'no') ||
+                  !!member.date_of_death;
+                if (!deceased) return 'Yes';
+                return member.date_of_death ? 'No' : 'No (death date not recorded)';
+              })()}
+            />
+            <Field icon={Calendar} label="Date of birth" value={member.date_of_birth ? formatCalendarLong(member.date_of_birth) : null} />
+            <Field icon={Calendar} label="Date of death" value={member.date_of_death ? formatCalendarLong(member.date_of_death) : null} />
+            <Field icon={Calendar} label="Anniversary date" value={member.anniversary_date ? formatCalendarLong(member.anniversary_date) : null} />
             <Field icon={Phone} label="Phone" value={member.phone} />
+            <Field icon={MessageCircle} label="WhatsApp number" value={member.whatsapp_number} />
             <Field icon={Mail} label="Email" value={member.email} />
-            <Field icon={MapPin} label="Birth place" value={member.birth_place} />
+            <Field icon={MapPin} label="Birth place" value={birthPlace} />
+            <Field icon={MapPin} label="Current city" value={currentCity} />
             <Field icon={Briefcase} label="Occupation" value={member.occupation} />
+            <Field icon={Briefcase} label="Educational qualification" value={member.educational_qualification} />
+            <Field icon={User} label="Marital status" value={member.marital_status} />
+            <Field icon={Activity} label="Blood group" value={member.blood_group} />
+            <Field icon={Activity} label="Privacy level" value={member.privacy_level} />
+            <Field icon={User} label="Instagram ID" value={member.instagram_id} />
+            <Field icon={User} label="Facebook ID" value={member.facebook_id} />
           </div>
-          {member.notes && (
+          {member.biography && (
             <div className="mt-6">
-              <p className="mb-1 text-sm font-medium text-gray-500 dark:text-gray-400">Notes</p>
-              <p className="text-gray-900 dark:text-white whitespace-pre-wrap">{member.notes}</p>
+              <p className="mb-1 text-sm font-medium text-gray-500 dark:text-gray-400">Biography</p>
+              <p className="text-gray-900 dark:text-white whitespace-pre-wrap">{member.biography}</p>
             </div>
           )}
         </div>

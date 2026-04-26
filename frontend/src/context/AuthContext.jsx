@@ -4,6 +4,7 @@ const AuthContext = createContext(null);
 
 const TOKEN_KEY = 'jagiris_token';
 const USER_KEY = 'jagiris_user';
+const ACTIVE_FAMILY_KEY = 'jagiris_active_family_id';
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -37,6 +38,7 @@ export function AuthProvider({ children }) {
     setUser(null);
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
+    localStorage.removeItem(ACTIVE_FAMILY_KEY);
   };
 
   return (

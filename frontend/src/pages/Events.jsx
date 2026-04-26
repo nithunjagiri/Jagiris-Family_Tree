@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Calendar, Plus } from 'lucide-react';
 import { eventsApi } from '../services/api';
 import { cn } from '../lib/utils';
+import { eventCalendarParts } from '../lib/calendarDate';
 
 export default function Events() {
   const [events, setEvents] = useState([]);
@@ -149,20 +150,22 @@ export default function Events() {
             {events.length === 0 && (
               <li className="py-12 text-center text-gray-500 dark:text-gray-400">No events found.</li>
             )}
-            {events.map((ev) => (
+            {events.map((ev) => {
+              const parts = eventCalendarParts(ev.event_date);
+              return (
               <li
                 key={ev.id}
                 className="flex gap-4 p-4 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50"
               >
                 <div className="flex shrink-0 flex-col items-center justify-center rounded-xl bg-primary-100 px-3 py-2 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">
                   <span className="text-xs font-medium uppercase">
-                    {new Date(ev.event_date).toLocaleDateString(undefined, { month: 'short' })}
+                    {parts?.monthShort ?? '—'}
                   </span>
                   <span className="text-xl font-bold">
-                    {new Date(ev.event_date).getDate()}
+                    {parts?.day ?? '—'}
                   </span>
                   <span className="text-xs">
-                    {new Date(ev.event_date).getFullYear()}
+                    {parts?.year ?? '—'}
                   </span>
                 </div>
                 <div className="min-w-0 flex-1">
@@ -172,7 +175,8 @@ export default function Events() {
                   )}
                 </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </div>

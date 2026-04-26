@@ -1,13 +1,64 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
-import { familyMembersApi } from '../services/api';
+import { familyMembersApi, placesApi } from '../services/api';
 import { cn } from '../lib/utils';
+import {
+  RELATION_OTHERS_VALUE,
+  resolveRelationForPayload,
+  splitStoredRelation,
+  getRelationSelectOptions,
+} from '../lib/relationOptions';
+import { findDuplicateMembers } from '../lib/memberDuplicates';
+import DuplicateMemberModal from '../components/DuplicateMemberModal';
+import { buildMemberLinkOptions } from '../lib/memberSelectOptions';
+import { HIDE_RELATION_NAMES_IN_UI } from '../lib/appDisplaySettings';
 
 const inputClass =
   'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-gray-600 dark:bg-gray-800 dark:text-white';
 
-const emptyOption = { value: '', label: '— None —' };
+const relationSelectOptions = getRelationSelectOptions();
+const MARITAL_STATUS_OPTIONS = [
+  { value: '', label: '— None —' },
+  { value: 'single', label: 'Single' },
+  { value: 'married', label: 'Married' },
+  { value: 'widowed', label: 'Widowed' },
+  { value: 'divorced', label: 'Divorced' },
+  { value: 'separated', label: 'Separated' },
+  { value: 'other', label: 'Other' },
+];
+const PRIVACY_LEVEL_OPTIONS = [
+  { value: '', label: '— None —' },
+  { value: 'public', label: 'Public' },
+  { value: 'family', label: 'Family only' },
+  { value: 'admin_only', label: 'Admin only' },
+];
+const OTHER_PLACE_VALUE = '__other__';
+const BLOOD_GROUP_OPTIONS = [
+  { value: '', label: '— None —' },
+  { value: 'A+', label: 'A+' },
+  { value: 'A-', label: 'A-' },
+  { value: 'B+', label: 'B+' },
+  { value: 'B-', label: 'B-' },
+  { value: 'AB+', label: 'AB+' },
+  { value: 'AB-', label: 'AB-' },
+  { value: 'O+', label: 'O+' },
+  { value: 'O-', label: 'O-' },
+];
+
+/** Normalize API row so edit form shows correct radios (varchar, boolean, or legacy null). */
+function livingFromMember(m) {
+  const death = m.date_of_death ? String(m.date_of_death).slice(0, 10) : '';
+  const v = m.is_alive;
+  if (v === false || v === 0) return false;
+  if (v === true || v === 1) return true;
+  if (typeof v === 'string') {
+    const t = v.trim().toLowerCase();
+    if (t === 'no' || t === 'false' || t === '0') return false;
+    if (t === 'yes' || t === 'true' || t === '1') return true;
+  }
+  return !death;
+}
 
 export default function AddMemberForm() {
   const navigate = useNavigate();
@@ -18,15 +69,32 @@ export default function AddMemberForm() {
   const [members, setMembers] = useState([]);
   const [name, setName] = useState('');
   const [surname, setSurname] = useState('');
-  const [relation, setRelation] = useState('');
+  const [relationSelect, setRelationSelect] = useState('');
+  const [relationOtherText, setRelationOtherText] = useState('');
   const [gender, setGender] = useState('');
   const [date_of_birth, setDateOfBirth] = useState('');
   const [date_of_death, setDateOfDeath] = useState('');
+  /** true = living (no date_of_death); false = deceased */
+  const [isAlive, setIsAlive] = useState(true);
   const [phone, setPhone] = useState('');
+  const [whatsapp_number, setWhatsappNumber] = useState('');
   const [email, setEmail] = useState('');
   const [birth_place, setBirthPlace] = useState('');
+  const [birth_place_id, setBirthPlaceId] = useState('');
+  const [birthPlaceChoice, setBirthPlaceChoice] = useState('');
+  const [residence_place_id, setResidencePlaceId] = useState('');
+  const [residence_place, setResidencePlace] = useState('');
+  const [currentCityChoice, setCurrentCityChoice] = useState('');
   const [occupation, setOccupation] = useState('');
-  const [notes, setNotes] = useState('');
+  const [educational_qualification, setEducationalQualification] = useState('');
+  const [marital_status, setMaritalStatus] = useState('');
+  const [anniversary_date, setAnniversaryDate] = useState('');
+  const [blood_group, setBloodGroup] = useState('');
+  const [privacy_level, setPrivacyLevel] = useState('');
+  const [biography, setBiography] = useState('');
+  const [instagram_id, setInstagramId] = useState('');
+  const [facebook_id, setFacebookId] = useState('');
+  const [placeOptions, setPlaceOptions] = useState([]);
   const [father_id, setFatherId] = useState('');
   const [mother_id, setMotherId] = useState('');
   const [spouse_id, setSpouseId] = useState('');
@@ -34,9 +102,21 @@ export default function AddMemberForm() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(isEdit);
+  const [dupModalOpen, setDupModalOpen] = useState(false);
+  const [dupMatches, setDupMatches] = useState([]);
+  const [dupDobDiffers, setDupDobDiffers] = useState(false);
 
   useEffect(() => {
-    familyMembersApi.list().then((r) => setMembers(r.data || []));
+    Promise.all([familyMembersApi.list(), placesApi.list()])
+      .then(([membersRes, placesRes]) => {
+        setMembers(membersRes.data || []);
+        const pins = placesRes.data?.pins || [];
+        setPlaceOptions(pins.map((p) => ({ id: String(p.id), name: p.name })));
+      })
+      .catch(() => {
+        setMembers([]);
+        setPlaceOptions([]);
+      });
   }, []);
 
   useEffect(() => {
@@ -58,15 +138,30 @@ export default function AddMemberForm() {
         const m = r.data;
         setName(m.name || '');
         setSurname(m.surname || '');
-        setRelation(m.relation || '');
+        const rel = splitStoredRelation(m.relation);
+        setRelationSelect(rel.relationSelect);
+        setRelationOtherText(rel.relationOtherText);
         setGender(m.gender || '');
         setDateOfBirth(m.date_of_birth ? m.date_of_birth.slice(0, 10) : '');
-        setDateOfDeath(m.date_of_death ? m.date_of_death.slice(0, 10) : '');
+        const death = m.date_of_death ? m.date_of_death.slice(0, 10) : '';
+        setDateOfDeath(death);
+        setIsAlive(livingFromMember(m));
         setPhone(m.phone || '');
+        setWhatsappNumber(m.whatsapp_number || '');
         setEmail(m.email || '');
         setBirthPlace(m.birth_place || '');
+        setBirthPlaceId(m.birth_place_id ? String(m.birth_place_id) : '');
+        setResidencePlaceId(m.residence_place_id ? String(m.residence_place_id) : '');
+        setResidencePlace(m.residence_place || '');
         setOccupation(m.occupation || '');
-        setNotes(m.notes || '');
+        setEducationalQualification(m.educational_qualification || '');
+        setMaritalStatus(m.marital_status || '');
+        setAnniversaryDate(m.anniversary_date ? m.anniversary_date.slice(0, 10) : '');
+        setBloodGroup(m.blood_group || '');
+        setPrivacyLevel(m.privacy_level || '');
+        setBiography(m.biography || '');
+        setInstagramId(m.instagram_id || '');
+        setFacebookId(m.facebook_id || '');
         setFatherId(m.father_id ? String(m.father_id) : '');
         setMotherId(m.mother_id ? String(m.mother_id) : '');
         setSpouseId(m.spouse_id ? String(m.spouse_id) : '');
@@ -75,68 +170,201 @@ export default function AddMemberForm() {
       .finally(() => setFetching(false));
   }, [id, isEdit]);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-    try {
-      const payload = {
+  useEffect(() => {
+    if (birth_place_id) {
+      setBirthPlaceChoice(String(birth_place_id));
+    } else if ((birth_place || '').trim()) {
+      setBirthPlaceChoice(OTHER_PLACE_VALUE);
+    } else {
+      setBirthPlaceChoice('');
+    }
+  }, [birth_place_id, birth_place]);
+
+  useEffect(() => {
+    if (residence_place_id) {
+      setCurrentCityChoice(String(residence_place_id));
+    } else if ((residence_place || '').trim()) {
+      setCurrentCityChoice(OTHER_PLACE_VALUE);
+    } else {
+      setCurrentCityChoice('');
+    }
+  }, [residence_place_id, residence_place]);
+
+  const buildPayload = useCallback(
+    (living) => {
+      const resolvedRelation = resolveRelationForPayload(relationSelect, relationOtherText);
+      return {
         name,
         surname: surname || null,
-        relation: relation || null,
+        relation: resolvedRelation ?? null,
         gender: gender || null,
         date_of_birth: date_of_birth || null,
-        date_of_death: date_of_death || null,
+        date_of_death: living ? null : date_of_death || null,
+        is_alive: living ? 'Yes' : 'No',
         phone: phone || null,
+        whatsapp_number: whatsapp_number || null,
         email: email || null,
         birth_place: birth_place || null,
+        birth_place_id: birth_place_id || null,
+        residence_place_id: residence_place_id || null,
+        residence_place: residence_place || null,
         occupation: occupation || null,
-        notes: notes || null,
+        educational_qualification: educational_qualification || null,
+        marital_status: marital_status || null,
+        anniversary_date: anniversary_date || null,
+        blood_group: blood_group || null,
+        privacy_level: privacy_level || null,
+        biography: biography || null,
+        instagram_id: instagram_id || null,
+        facebook_id: facebook_id || null,
         father_id: father_id || null,
         mother_id: mother_id || null,
         spouse_id: spouse_id || null,
       };
-      if (isEdit) {
-        await familyMembersApi.update(id, payload, profileFile || undefined);
-      } else {
-        const created = await familyMembersApi.create(payload, profileFile || undefined);
-        if (state.childId && state.childGender && created?.data?.id) {
-          try {
-            const childRes = await familyMembersApi.get(state.childId);
-            const child = childRes.data;
-            const updatePayload = {
-              name: child.name,
-              surname: child.surname ?? null,
-              relation: child.relation ?? null,
-              gender: child.gender ?? null,
-              date_of_birth: child.date_of_birth ?? null,
-              phone: child.phone ?? null,
-              email: child.email ?? null,
-              birth_place: child.birth_place ?? null,
-              occupation: child.occupation ?? null,
-              notes: child.notes ?? null,
-              father_id: state.childGender === 'Male' ? created.data.id : (child.father_id ?? null),
-              mother_id: state.childGender === 'Female' ? created.data.id : (child.mother_id ?? null),
-              spouse_id: child.spouse_id ?? null,
-            };
-            await familyMembersApi.update(state.childId, updatePayload);
-          } catch (_) {}
+    },
+    [
+      name,
+      surname,
+      relationSelect,
+      relationOtherText,
+      gender,
+      date_of_birth,
+      date_of_death,
+      phone,
+      whatsapp_number,
+      email,
+      birth_place,
+      birth_place_id,
+      residence_place_id,
+      residence_place,
+      occupation,
+      educational_qualification,
+      marital_status,
+      anniversary_date,
+      blood_group,
+      privacy_level,
+      biography,
+      instagram_id,
+      facebook_id,
+      father_id,
+      mother_id,
+      spouse_id,
+    ]
+  );
+
+  const saveMember = useCallback(async () => {
+    const living = isAlive;
+    const payload = buildPayload(living);
+    if (isEdit) {
+      await familyMembersApi.update(id, payload, profileFile || undefined);
+    } else {
+      const created = await familyMembersApi.create(payload, profileFile || undefined);
+      if (state.childId && state.childGender && created?.data?.id) {
+        try {
+          const childRes = await familyMembersApi.get(state.childId);
+          const child = childRes.data;
+          const updatePayload = {
+            name: child.name,
+            surname: child.surname ?? null,
+            relation: child.relation ?? null,
+            gender: child.gender ?? null,
+            date_of_birth: child.date_of_birth ?? null,
+            date_of_death: child.date_of_death ?? null,
+            is_alive:
+              child.is_alive === 'Yes' || child.is_alive === 'No'
+                ? child.is_alive
+                : child.date_of_death
+                  ? 'No'
+                  : 'Yes',
+            phone: child.phone ?? null,
+            whatsapp_number: child.whatsapp_number ?? null,
+            email: child.email ?? null,
+            birth_place: child.birth_place ?? null,
+            birth_place_id: child.birth_place_id ?? null,
+            residence_place_id: child.residence_place_id ?? null,
+            residence_place: child.residence_place ?? null,
+            occupation: child.occupation ?? null,
+            educational_qualification: child.educational_qualification ?? null,
+            marital_status: child.marital_status ?? null,
+            anniversary_date: child.anniversary_date ?? null,
+            blood_group: child.blood_group ?? null,
+            privacy_level: child.privacy_level ?? null,
+            biography: child.biography ?? null,
+            instagram_id: child.instagram_id ?? null,
+            facebook_id: child.facebook_id ?? null,
+            father_id: state.childGender === 'Male' ? created.data.id : (child.father_id ?? null),
+            mother_id: state.childGender === 'Female' ? created.data.id : (child.mother_id ?? null),
+            spouse_id: child.spouse_id ?? null,
+          };
+          await familyMembersApi.update(state.childId, updatePayload);
+        } catch (_) {}
+      }
+    }
+    const display = [name, surname].filter(Boolean).join(' ').trim() || String(name || '').trim() || 'Member';
+    navigate('/family-members', {
+      state: {
+        memberSavedMessage: isEdit
+          ? `Saved changes for ${display}.`
+          : `${display} was added to your family list.`,
+      },
+    });
+  }, [buildPayload, isAlive, isEdit, id, profileFile, state.childId, state.childGender, navigate, name, surname]);
+
+  const runSaveAfterDuplicateCheck = useCallback(
+    async (skipDuplicateCheck) => {
+      setError('');
+      /* Duplicate warning is only for new members; edits save without this step. */
+      if (!skipDuplicateCheck && !isEdit) {
+        const { matches, dobDiffersFromForm } = findDuplicateMembers(
+          members,
+          { name, surname, gender },
+          undefined,
+          date_of_birth
+        );
+        if (matches.length > 0) {
+          setDupMatches(matches);
+          setDupDobDiffers(dobDiffersFromForm);
+          setDupModalOpen(true);
+          return;
         }
       }
-      navigate('/family-members');
-    } catch (err) {
-      setError(
-        err.response?.data?.error || err.response?.data?.errors?.[0]?.msg || 'Save failed'
-      );
-    } finally {
-      setLoading(false);
-    }
+      setLoading(true);
+      try {
+        await saveMember();
+      } catch (err) {
+        setError(
+          err.response?.data?.error || err.response?.data?.errors?.[0]?.msg || 'Save failed'
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [members, name, surname, gender, date_of_birth, isEdit, saveMember]
+  );
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    void runSaveAfterDuplicateCheck(false);
   };
 
-  const memberOptions = members.map((m) => ({
-    value: String(m.id),
-    label: [m.name, m.surname].filter(Boolean).join(' ') || `#${m.id}`,
-  }));
+  const handleDuplicateCancel = () => {
+    setDupModalOpen(false);
+    setDupMatches([]);
+  };
+
+  const handleDuplicateProceed = () => {
+    setDupModalOpen(false);
+    setDupMatches([]);
+    void runSaveAfterDuplicateCheck(true);
+  };
+
+  const memberOptions = useMemo(
+    () =>
+      buildMemberLinkOptions(members, {
+        excludeId: isEdit && id != null && id !== '' ? Number(id) : null,
+      }),
+    [members, isEdit, id]
+  );
   const toNum = (v) => (v === '' ? null : v);
 
   if (fetching) {
@@ -175,35 +403,116 @@ export default function AddMemberForm() {
               <input value={surname} onChange={(e) => setSurname(e.target.value)} className={inputClass} />
             </div>
           </div>
-          <div className="grid gap-6 sm:grid-cols-2">
+          <div className={cn('grid gap-6', !HIDE_RELATION_NAMES_IN_UI && 'sm:grid-cols-2')}>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Gender</label>
-              <select value={gender} onChange={(e) => setGender(e.target.value)} className={inputClass}>
-                <option value="">— Select —</option>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Gender *</label>
+              <select
+                value={gender}
+                onChange={(e) => setGender(e.target.value)}
+                required
+                className={inputClass}
+              >
+                <option value="" disabled>
+                  — Select —
+                </option>
                 <option value="Male">Male</option>
                 <option value="Female">Female</option>
                 <option value="Other">Other</option>
               </select>
             </div>
+            {!HIDE_RELATION_NAMES_IN_UI ? (
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Relation</label>
+                <select
+                  value={relationSelect}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setRelationSelect(v);
+                    if (v !== RELATION_OTHERS_VALUE) setRelationOtherText('');
+                  }}
+                  className={inputClass}
+                >
+                  <option value="">— None —</option>
+                  {relationSelectOptions.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                  <option value={RELATION_OTHERS_VALUE}>Others</option>
+                </select>
+              </div>
+            ) : null}
+          </div>
+          {!HIDE_RELATION_NAMES_IN_UI && relationSelect === RELATION_OTHERS_VALUE ? (
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Relation</label>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Specify relation
+              </label>
               <input
-                value={relation}
-                onChange={(e) => setRelation(e.target.value)}
-                placeholder="e.g. Self, Wife, Son"
+                value={relationOtherText}
+                onChange={(e) => setRelationOtherText(e.target.value)}
+                placeholder="Optional — if empty, saves as Others only"
                 className={inputClass}
               />
             </div>
+          ) : null}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Date of birth</label>
+            <input type="date" value={date_of_birth} onChange={(e) => setDateOfBirth(e.target.value)} className={inputClass} />
           </div>
-          <div className="grid gap-6 sm:grid-cols-2">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Date of birth</label>
-              <input type="date" value={date_of_birth} onChange={(e) => setDateOfBirth(e.target.value)} className={inputClass} />
+          <fieldset className="space-y-2">
+            <legend className="mb-1.5 text-sm font-medium text-gray-700 dark:text-gray-300">Is alive</legend>
+            <div className="flex flex-wrap gap-6">
+              <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-gray-800 dark:text-gray-200">
+                <input
+                  type="radio"
+                  name="isAlive"
+                  value="Yes"
+                  checked={isAlive}
+                  onChange={() => {
+                    setIsAlive(true);
+                    setDateOfDeath('');
+                  }}
+                  className="h-4 w-4 border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800"
+                />
+                Yes
+              </label>
+              <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-gray-800 dark:text-gray-200">
+                <input
+                  type="radio"
+                  name="isAlive"
+                  value="No"
+                  checked={!isAlive}
+                  onChange={() => setIsAlive(false)}
+                  className="h-4 w-4 border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800"
+                />
+                No
+              </label>
             </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Date of death</label>
-              <input type="date" value={date_of_death} onChange={(e) => setDateOfDeath(e.target.value)} className={inputClass} />
-            </div>
+          </fieldset>
+          <div>
+            <label
+              className={cn(
+                'mb-1.5 block text-sm font-medium',
+                isAlive ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-300'
+              )}
+            >
+              Date of death
+            </label>
+            <input
+              type="date"
+              value={date_of_death}
+              onChange={(e) => setDateOfDeath(e.target.value)}
+              disabled={isAlive}
+              className={cn(
+                inputClass,
+                isAlive && 'cursor-not-allowed opacity-50 dark:opacity-40'
+              )}
+              aria-disabled={isAlive}
+            />
+            {isAlive && (
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Only if the person is not alive.</p>
+            )}
           </div>
           <div className="grid gap-6 sm:grid-cols-2">
             <div>
@@ -211,23 +520,135 @@ export default function AddMemberForm() {
               <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className={inputClass} />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Email</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">WhatsApp number</label>
+              <input type="tel" value={whatsapp_number} onChange={(e) => setWhatsappNumber(e.target.value)} className={inputClass} />
             </div>
           </div>
           <div className="grid gap-6 sm:grid-cols-2">
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Birth place</label>
-              <input value={birth_place} onChange={(e) => setBirthPlace(e.target.value)} className={inputClass} />
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Email</label>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Occupation</label>
               <input value={occupation} onChange={(e) => setOccupation(e.target.value)} className={inputClass} />
             </div>
           </div>
+          <div className="grid gap-6 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Birth place</label>
+              <select
+                value={birthPlaceChoice}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setBirthPlaceChoice(v);
+                  if (v === OTHER_PLACE_VALUE) {
+                    setBirthPlaceId('');
+                  } else {
+                    setBirthPlaceId(v || '');
+                    setBirthPlace('');
+                  }
+                }}
+                className={inputClass}
+              >
+                <option value="">— None —</option>
+                {placeOptions.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+                <option value={OTHER_PLACE_VALUE}>Other</option>
+              </select>
+              {birthPlaceChoice === OTHER_PLACE_VALUE && (
+                <input
+                  value={birth_place}
+                  onChange={(e) => setBirthPlace(e.target.value)}
+                  className={cn(inputClass, 'mt-2')}
+                  placeholder="Enter birth place"
+                />
+              )}
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Current city</label>
+              <select
+                value={currentCityChoice}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setCurrentCityChoice(v);
+                  if (v === OTHER_PLACE_VALUE) {
+                    setResidencePlaceId('');
+                  } else {
+                    setResidencePlaceId(v || '');
+                    setResidencePlace('');
+                  }
+                }}
+                className={inputClass}
+              >
+                <option value="">— None —</option>
+                {placeOptions.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+                <option value={OTHER_PLACE_VALUE}>Other</option>
+              </select>
+              {currentCityChoice === OTHER_PLACE_VALUE && (
+                <input
+                  value={residence_place}
+                  onChange={(e) => setResidencePlace(e.target.value)}
+                  className={cn(inputClass, 'mt-2')}
+                  placeholder="Enter current city"
+                />
+              )}
+            </div>
+          </div>
+          <div className="grid gap-6 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Educational qualification</label>
+              <input value={educational_qualification} onChange={(e) => setEducationalQualification(e.target.value)} className={inputClass} />
+            </div>
+          </div>
+          <div className="grid gap-6 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Marital status</label>
+              <select value={marital_status} onChange={(e) => setMaritalStatus(e.target.value)} className={inputClass}>
+                {MARITAL_STATUS_OPTIONS.map((o) => (
+                  <option key={o.value || 'none'} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Anniversary date</label>
+              <input type="date" value={anniversary_date} onChange={(e) => setAnniversaryDate(e.target.value)} className={inputClass} />
+            </div>
+          </div>
+          <div className="grid gap-6 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Blood group</label>
+              <select value={blood_group} onChange={(e) => setBloodGroup(e.target.value)} className={inputClass}>
+                {BLOOD_GROUP_OPTIONS.map((o) => (
+                  <option key={o.value || 'none'} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Profile privacy level</label>
+              <select value={privacy_level} onChange={(e) => setPrivacyLevel(e.target.value)} className={inputClass}>
+                {PRIVACY_LEVEL_OPTIONS.map((o) => (
+                  <option key={o.value || 'none'} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="grid gap-6 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Instagram ID</label>
+              <input value={instagram_id} onChange={(e) => setInstagramId(e.target.value)} className={inputClass} />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Facebook ID</label>
+              <input value={facebook_id} onChange={(e) => setFacebookId(e.target.value)} className={inputClass} />
+            </div>
+          </div>
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Notes</label>
-            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} className={inputClass} />
+            <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Biography</label>
+            <textarea value={biography} onChange={(e) => setBiography(e.target.value)} rows={3} className={inputClass} />
           </div>
           <div className="grid gap-6 sm:grid-cols-3">
             <div>
@@ -277,6 +698,14 @@ export default function AddMemberForm() {
           </button>
         </form>
       </div>
+
+      <DuplicateMemberModal
+        open={dupModalOpen}
+        matches={dupMatches}
+        dobDiffersFromForm={dupDobDiffers}
+        onCancel={handleDuplicateCancel}
+        onProceed={handleDuplicateProceed}
+      />
     </div>
   );
 }
