@@ -99,7 +99,7 @@ async function validateFamilyRelations(client, { familyId, memberId, fatherId, m
 
 exports.list = async (req, res, next) => {
   try {
-    const familyId = 1; // TEMP FIX
+    const familyId = req.familyId; // TEMP FIX
 
     const result = await db.query(
       `SELECT ${COLS}
