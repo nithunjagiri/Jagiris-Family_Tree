@@ -5,6 +5,7 @@ import { MapPin, Plus, Trash2 } from 'lucide-react';
 import { placesApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../lib/utils';
+import { getApiErrorMessage } from '../lib/apiErrorMessage';
 
 import 'leaflet/dist/leaflet.css';
 
@@ -53,7 +54,7 @@ export default function PlacesMap() {
         setError('');
       })
       .catch((err) => {
-        setError(err.response?.data?.error || 'Could not load places.');
+        setError(getApiErrorMessage(err, 'Could not load places.'));
       })
       .finally(() => setLoading(false));
   };
@@ -90,11 +91,7 @@ export default function PlacesMap() {
       setFormOpen(false);
       load();
     } catch (err) {
-      const msg =
-        err.response?.data?.errors?.[0]?.msg ||
-        err.response?.data?.error ||
-        'Could not save place.';
-      setFormError(msg);
+      setFormError(getApiErrorMessage(err, 'Could not save place.'));
     } finally {
       setSubmitting(false);
     }
@@ -106,7 +103,7 @@ export default function PlacesMap() {
       await placesApi.remove(id);
       load();
     } catch (err) {
-      alert(err.response?.data?.error || 'Delete failed');
+      alert(getApiErrorMessage(err, 'Delete failed'));
     }
   };
 

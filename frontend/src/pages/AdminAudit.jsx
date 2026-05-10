@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ClipboardList } from 'lucide-react';
 import { adminApi } from '../services/api';
+import { getApiErrorMessage } from '../lib/apiErrorMessage';
 
 function formatTime(iso) {
   if (!iso) return '—';
@@ -31,7 +32,7 @@ export default function AdminAudit() {
         setError('');
       })
       .catch((err) => {
-        setError(err.response?.data?.error || 'Could not load audit log.');
+        setError(getApiErrorMessage(err, 'Could not load audit log.'));
       })
       .finally(() => setLoading(false));
   };

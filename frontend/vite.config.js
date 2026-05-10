@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  // Local dev: proxies match production paths. For Vercel + Render, set VITE_BACKEND_ORIGIN (see .env.example).
   server: {
     port: 5175,
     proxy: {

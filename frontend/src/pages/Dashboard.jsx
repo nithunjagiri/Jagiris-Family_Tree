@@ -30,6 +30,7 @@ import { familyMembersApi, photosApi, eventsApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../lib/utils';
 import { HIDE_RELATION_NAMES_IN_UI } from '../lib/appDisplaySettings';
+import { resolveBackendPublicUrl } from '../lib/backendOrigin';
 import {
   birthsByDecade,
   deathsByYear,
@@ -570,7 +571,7 @@ export default function Dashboard() {
                   to="/gallery"
                   className="aspect-square overflow-hidden rounded-xl bg-gray-100 ring-1 ring-gray-200/80 transition-all hover:ring-2 hover:ring-primary-300 dark:bg-gray-800 dark:ring-gray-700"
                 >
-                  <img src={p.image_path} alt={p.title || ''} className="h-full w-full object-cover" />
+                  <img src={resolveBackendPublicUrl(p.image_path)} alt={p.title || ''} className="h-full w-full object-cover" />
                 </Link>
               ))
             )}

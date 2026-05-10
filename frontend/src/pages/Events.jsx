@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Calendar, Plus } from 'lucide-react';
 import { eventsApi } from '../services/api';
 import { cn } from '../lib/utils';
+import { getApiErrorMessage } from '../lib/apiErrorMessage';
 import { eventCalendarParts } from '../lib/calendarDate';
 
 export default function Events() {
@@ -39,9 +40,7 @@ export default function Events() {
       setShowForm(false);
       load();
     } catch (err) {
-      setSubmitError(
-        err.response?.data?.error || err.response?.data?.errors?.[0]?.msg || 'Failed to add event'
-      );
+      setSubmitError(getApiErrorMessage(err, 'Failed to add event'));
     } finally {
       setSubmitting(false);
     }

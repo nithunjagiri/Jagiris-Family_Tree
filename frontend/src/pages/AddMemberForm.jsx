@@ -13,6 +13,7 @@ import { findDuplicateMembers } from '../lib/memberDuplicates';
 import DuplicateMemberModal from '../components/DuplicateMemberModal';
 import { buildMemberLinkOptions } from '../lib/memberSelectOptions';
 import { HIDE_RELATION_NAMES_IN_UI } from '../lib/appDisplaySettings';
+import { getApiErrorMessage } from '../lib/apiErrorMessage';
 
 const inputClass =
   'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-gray-600 dark:bg-gray-800 dark:text-white';
@@ -332,9 +333,7 @@ export default function AddMemberForm() {
       try {
         await saveMember();
       } catch (err) {
-        setError(
-          err.response?.data?.error || err.response?.data?.errors?.[0]?.msg || 'Save failed'
-        );
+        setError(getApiErrorMessage(err, 'Save failed'));
       } finally {
         setLoading(false);
       }

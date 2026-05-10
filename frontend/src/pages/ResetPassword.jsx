@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { authApi } from '../services/api';
+import { getApiErrorMessage } from '../lib/apiErrorMessage';
 import { cn } from '../lib/utils';
 import { AuthBranding } from '../components/AuthBranding';
 
@@ -89,12 +90,7 @@ export default function ResetPassword() {
         state: { message: data.message || 'Password updated. You can log in now.' },
       });
     } catch (err) {
-      const data = err.response?.data;
-      setError(
-        data?.error ||
-          (Array.isArray(data?.errors) && data.errors[0]?.msg) ||
-          'Could not reset password.'
-      );
+      setError(getApiErrorMessage(err, 'Could not reset password.'));
     } finally {
       setLoading(false);
     }

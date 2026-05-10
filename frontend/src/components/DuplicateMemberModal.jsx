@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { User } from 'lucide-react';
 import { formatCalendarLong, parseCalendarYmd } from '../lib/calendarDate';
 import { HIDE_RELATION_NAMES_IN_UI } from '../lib/appDisplaySettings';
+import { resolveBackendPublicUrl } from '../lib/backendOrigin';
 
 function formatDate(d) {
   const p = parseCalendarYmd(d);
@@ -79,7 +80,7 @@ export default function DuplicateMemberModal({
               >
                 <div className="h-16 w-16 shrink-0 overflow-hidden rounded-full border border-gray-200 bg-gray-100 dark:border-gray-600 dark:bg-gray-700">
                   {m.profile_photo ? (
-                    <img src={m.profile_photo} alt="" className="h-full w-full object-cover" />
+                    <img src={resolveBackendPublicUrl(m.profile_photo)} alt="" className="h-full w-full object-cover" />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center text-gray-400">
                       <User className="h-8 w-8" />

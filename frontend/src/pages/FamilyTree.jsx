@@ -4,6 +4,7 @@ import Tree from 'react-d3-tree';
 import { User, UserPlus, ZoomIn, ZoomOut, Maximize2, Expand, Shrink } from 'lucide-react';
 import { familyTreeApi } from '../services/api';
 import { formatCalendarLong } from '../lib/calendarDate';
+import { resolveBackendPublicUrl } from '../lib/backendOrigin';
 
 const NODE_WIDTH = 140;
 /** SVG foreignObject box — tight; overflow visible so extra text is not clipped. */
@@ -114,7 +115,7 @@ function CustomNode({ nodeDatum, onNodeClick, onSpouseClick }) {
           >
             <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full bg-gray-100 ring-1 ring-gray-100/80 dark:bg-gray-700 dark:ring-gray-600">
               {photo ? (
-                <img src={photo} alt="" className="h-full w-full object-cover" />
+                <img src={resolveBackendPublicUrl(photo)} alt="" className="h-full w-full object-cover" />
               ) : (
                 <div className="flex h-full w-full items-center justify-center text-gray-400">
                   <User className="h-4 w-4" />
@@ -158,7 +159,7 @@ function CustomNode({ nodeDatum, onNodeClick, onSpouseClick }) {
               >
                 <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full bg-gray-100 ring-1 ring-gray-100/80 dark:bg-gray-700 dark:ring-gray-600">
                   {spouse.profile_photo ? (
-                    <img src={spouse.profile_photo} alt="" className="h-full w-full object-cover" />
+                    <img src={resolveBackendPublicUrl(spouse.profile_photo)} alt="" className="h-full w-full object-cover" />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center text-gray-400">
                       <User className="h-4 w-4" />

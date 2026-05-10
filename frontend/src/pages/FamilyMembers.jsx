@@ -6,6 +6,8 @@ import { familyMembersApi } from '../services/api';
 import { cn } from '../lib/utils';
 import { formatCalendarLong } from '../lib/calendarDate';
 import { HIDE_RELATION_NAMES_IN_UI } from '../lib/appDisplaySettings';
+import { resolveBackendPublicUrl } from '../lib/backendOrigin';
+import { getApiErrorMessage } from '../lib/apiErrorMessage';
 
 function displayName(m) {
   return [m.name, m.surname].filter(Boolean).join(' ') || m.name || '';
@@ -45,7 +47,7 @@ function MemberAvatar({ m, className, placeholderIconClassName = 'h-12 w-12' }) 
       )}
     >
       {m.profile_photo ? (
-        <img src={m.profile_photo} alt="" className="h-full w-full object-cover" />
+        <img src={resolveBackendPublicUrl(m.profile_photo)} alt="" className="h-full w-full object-cover" />
       ) : (
         <div className="flex h-full w-full items-center justify-center text-gray-400">
           <User className={placeholderIconClassName} />
@@ -138,7 +140,7 @@ export default function FamilyMembers() {
       await familyMembersApi.delete(id);
       setMembers((prev) => prev.filter((x) => x.id !== id));
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to delete');
+      alert(getApiErrorMessage(err, 'Failed to delete'));
     } finally {
       setDeletingId(null);
     }

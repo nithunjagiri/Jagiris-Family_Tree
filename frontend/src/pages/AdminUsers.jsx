@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Pencil, KeyRound, UserX, UserPlus, Search, RefreshCw } from 'lucide-react';
 import { adminApi } from '../services/api';
 import { cn } from '../lib/utils';
+import { getApiErrorMessage } from '../lib/apiErrorMessage';
 
 const limit = 30;
 
@@ -55,7 +56,7 @@ export default function AdminUsers() {
         setError('');
       })
       .catch((err) => {
-        setError(err.response?.data?.error || 'Could not load users.');
+        setError(getApiErrorMessage(err, 'Could not load users.'));
       })
       .finally(() => setLoading(false));
   };
@@ -89,7 +90,7 @@ export default function AdminUsers() {
       setNewPw('');
       setConfirmPw('');
     } catch (err) {
-      setResetErr(err.response?.data?.error || err.response?.data?.errors?.[0]?.msg || 'Reset failed.');
+      setResetErr(getApiErrorMessage(err, 'Reset failed.'));
     } finally {
       setResetLoading(false);
     }
@@ -103,7 +104,7 @@ export default function AdminUsers() {
       setDisableTarget(null);
       load();
     } catch (err) {
-      alert(err.response?.data?.error || 'Could not disable user.');
+      alert(getApiErrorMessage(err, 'Could not disable user.'));
     } finally {
       setDisableLoading(false);
     }

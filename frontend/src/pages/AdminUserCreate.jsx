@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { adminApi } from '../services/api';
+import { getApiErrorMessage } from '../lib/apiErrorMessage';
 
 export default function AdminUserCreate() {
   const navigate = useNavigate();
@@ -38,7 +39,7 @@ export default function AdminUserCreate() {
       });
       navigate('/admin/users');
     } catch (ex) {
-      setErr(ex.response?.data?.error || ex.response?.data?.errors?.[0]?.msg || 'Could not create user.');
+      setErr(getApiErrorMessage(ex, 'Could not create user.'));
     } finally {
       setLoading(false);
     }

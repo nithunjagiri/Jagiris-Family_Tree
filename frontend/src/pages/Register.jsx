@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { authApi } from '../services/api';
+import { getApiErrorMessage } from '../lib/apiErrorMessage';
 import { cn } from '../lib/utils';
 import { AuthBranding } from '../components/AuthBranding';
 
@@ -59,12 +60,7 @@ export default function Register() {
       await authApi.register(payload);
       navigate('/login', { replace: true, state: { message: 'Registered successfully. Please log in.' } });
     } catch (err) {
-      const data = err.response?.data;
-      const msg =
-        data?.error ||
-        (Array.isArray(data?.errors) && data.errors[0]?.msg) ||
-        'Registration failed';
-      setError(msg);
+      setError(getApiErrorMessage(err, 'Registration failed'));
     } finally {
       setLoading(false);
     }

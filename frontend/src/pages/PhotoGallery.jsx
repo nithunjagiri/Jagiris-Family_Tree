@@ -4,6 +4,8 @@ import { Upload, Trash2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { photosApi } from '../services/api';
 import { cn } from '../lib/utils';
+import { resolveBackendPublicUrl } from '../lib/backendOrigin';
+import { getApiErrorMessage } from '../lib/apiErrorMessage';
 
 export default function PhotoGallery() {
   const { isAdmin } = useAuth();
@@ -28,7 +30,7 @@ export default function PhotoGallery() {
       await photosApi.delete(id);
       setPhotos((p) => p.filter((x) => x.id !== id));
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to delete');
+      alert(getApiErrorMessage(err, 'Failed to delete'));
     } finally {
       setDeletingId(null);
     }
@@ -64,7 +66,7 @@ export default function PhotoGallery() {
           >
             <div className="overflow-hidden rounded-2xl">
               <img
-                src={p.image_path}
+                src={resolveBackendPublicUrl(p.image_path)}
                 alt={p.title}
                 className="h-auto w-full object-cover transition-transform duration-300 group-hover:scale-105"
               />

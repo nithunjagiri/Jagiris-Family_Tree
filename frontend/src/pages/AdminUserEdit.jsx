@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { adminApi } from '../services/api';
 import { cn } from '../lib/utils';
+import { getApiErrorMessage } from '../lib/apiErrorMessage';
 
 const GENDER_OPTIONS = [
   { value: '', label: 'Not set' },
@@ -66,7 +67,7 @@ export default function AdminUserEdit() {
         setErr('');
       })
       .catch((e) => {
-        if (!cancelled) setErr(e.response?.data?.error || 'Could not load user.');
+        if (!cancelled) setErr(getApiErrorMessage(e, 'Could not load user.'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -116,7 +117,7 @@ export default function AdminUserEdit() {
       }
       setMsg('User updated.');
     } catch (e) {
-      setErr(e.response?.data?.error || e.response?.data?.errors?.[0]?.msg || 'Save failed.');
+      setErr(getApiErrorMessage(e, 'Save failed.'));
     } finally {
       setSaving(false);
     }
@@ -355,7 +356,7 @@ export default function AdminUserEdit() {
                   setIsActive(true);
                   setMsg('Account re-enabled.');
                 } catch (e) {
-                  setErr(e.response?.data?.error || 'Could not enable account.');
+                  setErr(getApiErrorMessage(e, 'Could not enable account.'));
                 }
               }}
               className="mt-2 rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-800"

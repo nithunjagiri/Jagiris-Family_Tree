@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { authApi } from '../services/api';
+import { getApiErrorMessage } from '../lib/apiErrorMessage';
 import { cn } from '../lib/utils';
 import { AuthBranding } from '../components/AuthBranding';
 
@@ -40,12 +41,7 @@ export default function ForgotPassword() {
 
       setMessage(data.message || 'Request received.');
     } catch (err) {
-      const data = err.response?.data;
-      setError(
-        data?.error ||
-          (Array.isArray(data?.errors) && data.errors[0]?.msg) ||
-          'Something went wrong. Try again later.'
-      );
+      setError(getApiErrorMessage(err, 'Something went wrong. Try again later.'));
     } finally {
       setLoading(false);
     }

@@ -4,6 +4,7 @@ import { KeyRound, Download, UserX, Shield, ClipboardCheck, User } from 'lucide-
 import { accountApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../lib/utils';
+import { getApiErrorMessage } from '../lib/apiErrorMessage';
 
 const PROFILE_GENDER_OPTIONS = [
   { value: '', label: 'Not set' },
@@ -95,7 +96,7 @@ export default function AccountPrivacy() {
       })
       .catch((err) => {
         if (cancelled) return;
-        setPrivacyLoadErr(err.response?.data?.error || 'Could not load account privacy data.');
+        setPrivacyLoadErr(getApiErrorMessage(err, 'Could not load account privacy data.'));
       });
     return () => {
       cancelled = true;
@@ -141,9 +142,7 @@ export default function AccountPrivacy() {
       setProfileEditing(false);
       setProfileMsg('Profile saved.');
     } catch (err) {
-      setProfileErr(
-        err.response?.data?.error || err.response?.data?.errors?.[0]?.msg || 'Could not save profile.'
-      );
+      setProfileErr(getApiErrorMessage(err, 'Could not save profile.'));
     } finally {
       setProfileSaving(false);
     }
@@ -157,7 +156,7 @@ export default function AccountPrivacy() {
       setPrivacyReadAt(data?.privacy?.privacy_notice_read_at || null);
       setAckMsg('Recorded. Thank you.');
     } catch (err) {
-      setAckMsg(err.response?.data?.error || 'Could not save.');
+      setAckMsg(getApiErrorMessage(err, 'Could not save.'));
     } finally {
       setAckLoading(false);
     }
@@ -174,7 +173,7 @@ export default function AccountPrivacy() {
       setCurrentPassword('');
       setNewPassword('');
     } catch (err) {
-      setPwErr(err.response?.data?.error || err.response?.data?.errors?.[0]?.msg || 'Could not update password.');
+      setPwErr(getApiErrorMessage(err, 'Could not update password.'));
     } finally {
       setPwLoading(false);
     }
@@ -192,7 +191,7 @@ export default function AccountPrivacy() {
       a.click();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      alert(err.response?.data?.error || 'Export failed.');
+      alert(getApiErrorMessage(err, 'Export failed.'));
     } finally {
       setExporting(false);
     }
@@ -207,7 +206,7 @@ export default function AccountPrivacy() {
       logout();
       navigate('/login');
     } catch (err) {
-      setDeleteErr(err.response?.data?.error || err.response?.data?.errors?.[0]?.msg || 'Could not delete account.');
+      setDeleteErr(getApiErrorMessage(err, 'Could not delete account.'));
     } finally {
       setDeleteLoading(false);
     }

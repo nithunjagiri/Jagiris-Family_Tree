@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { photosApi } from '../services/api';
 import { cn } from '../lib/utils';
+import { getApiErrorMessage } from '../lib/apiErrorMessage';
 
 const inputClass =
   'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-gray-600 dark:bg-gray-800 dark:text-white';
@@ -26,7 +27,7 @@ export default function UploadPhotoForm() {
       await photosApi.upload(file, title || file.name);
       navigate('/gallery');
     } catch (err) {
-      setError(err.response?.data?.error || 'Upload failed');
+      setError(getApiErrorMessage(err, 'Upload failed'));
     } finally {
       setLoading(false);
     }

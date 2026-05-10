@@ -4,6 +4,7 @@ import { ArrowLeft, Pencil, User, Users, Mail, Phone, MessageCircle, MapPin, Bri
 import { familyMembersApi } from '../services/api';
 import { formatCalendarLong } from '../lib/calendarDate';
 import { HIDE_RELATION_NAMES_IN_UI } from '../lib/appDisplaySettings';
+import { resolveBackendPublicUrl } from '../lib/backendOrigin';
 
 function Field({ icon: Icon, label, value }) {
   if (value == null || value === '') return null;
@@ -116,7 +117,7 @@ export default function MemberProfile() {
           <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start sm:gap-6">
             <div className="h-24 w-24 shrink-0 overflow-hidden rounded-full border-2 border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-700">
               {member.profile_photo ? (
-                <img src={member.profile_photo} alt={fullName} className="h-full w-full object-cover" />
+                <img src={resolveBackendPublicUrl(member.profile_photo)} alt={fullName} className="h-full w-full object-cover" />
               ) : (
                 <div className="flex h-full w-full items-center justify-center text-gray-400">
                   <User className="h-12 w-12" />
