@@ -1,6 +1,7 @@
 const db = require('../database/db');
 const { body, validationResult } = require('express-validator');
 const { logAudit } = require('../lib/auditLog');
+const { useCloudinary } = require('../middleware/upload');
 
 const COLS =
   'fm.id, fm.family_id, fm.name, fm.surname, fm.relation, fm.date_of_birth, fm.phone, fm.whatsapp_number, fm.profile_photo, fm.father_id, fm.mother_id, fm.spouse_id, fm.gender, fm.email, fm.birth_place, fm.birth_place_id, fm.residence_place_id, fm.residence_place, fm.created_by, fm.updated_by, fm.occupation, fm.notes, fm.date_of_death, fm.is_alive, fm.education_level, fm.educational_qualification, fm.marital_status, fm.anniversary_date, fm.blood_group, fm.emergency_contact_name, fm.emergency_contact_phone, fm.privacy_level, fm.preferred_language, fm.biography, fm.instagram_id, fm.facebook_id, fm.created_at, fm.updated_at, pb.name AS birth_place_name, rp.name AS residence_place_name, uc.username AS created_by_username, uu.username AS updated_by_username';
@@ -169,7 +170,9 @@ exports.create = async (req, res, next) => {
 
   const client = await db.connect();
   try {
-    const profile_photo = req.file ? `/uploads/profiles/${req.file.filename}` : null;
+    const profile_photo = req.file
+      ? (useCloudinary ? req.file.path : `/uploads/profiles/${req.file.filename}`)
+      : null;
     const {
       name, surname, relation, date_of_birth, phone, whatsapp_number, gender, email, birth_place,
       birth_place_id, residence_place_id, occupation, notes, date_of_death, father_id, mother_id, spouse_id,
@@ -248,7 +251,9 @@ exports.update = async (req, res, next) => {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Family member not found' });
     }
-    const profile_photo = req.file ? `/uploads/profiles/${req.file.filename}` : existing.rows[0].profile_photo;
+    const profile_photo = req.file
+      ? (useCloudinary ? req.file.path : `/uploads/profiles/${req.file.filename}`)
+      : existing.rows[0].profile_photo;
     const prevSpouse = toNum(existing.rows[0].spouse_id);
 
     const {

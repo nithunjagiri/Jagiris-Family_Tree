@@ -14,8 +14,8 @@ const NODE_SIZE_X = NODE_WIDTH * 2 + SPOUSE_GAP + 60;
 /** Vertical spacing between tree levels (keep a bit below node height for edge lines). */
 const NODE_SIZE_Y = FOREIGN_OBJECT_HEIGHT + 44;
 
-const SCALE_EXTENT = { min: 0.25, max: 1.8 };
-const ZOOM_FACTOR = 1.15;
+const SCALE_EXTENT = { min: 0.05, max: 2.5 };
+const ZOOM_FACTOR = 1.35;
 
 const cardButtonClass =
   'flex min-h-0 flex-col items-center rounded-xl border border-gray-200/90 bg-white px-2 py-1.5 shadow-sm transition-all duration-200 hover:border-primary-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 dark:border-gray-600 dark:bg-gray-800/95 dark:hover:border-primary-500 dark:focus-visible:ring-offset-gray-950 cursor-pointer overflow-visible';
@@ -232,9 +232,7 @@ export default function FamilyTree() {
   }, [treeData, applyView]);
 
   const handleTreeUpdate = useCallback(({ zoom, translate }) => {
-    const next = { zoom, translate };
-    viewRef.current = next;
-    setTreeView((prev) => (viewNearlyEqual(prev, next) ? prev : next));
+    viewRef.current = { zoom, translate };
   }, []);
 
   const handleZoomIn = () => {
@@ -393,7 +391,9 @@ export default function FamilyTree() {
                   separation={{ siblings: 1.4, nonSiblings: 1.7 }}
                   zoom={treeView.zoom}
                   scaleExtent={SCALE_EXTENT}
-                  enableLegacyTransitions
+                  transitionDuration={0}
+                  depthFactor={NODE_SIZE_Y}
+                  hasInteractiveNodes
                 />
               ) : (
                 <div className="flex h-full min-h-[480px] items-center justify-center">

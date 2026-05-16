@@ -14,7 +14,7 @@
   }
 }
 
-/* react-d3-tree injects <style> with .rd3t-link { stroke: #000 }; use higher specificity than that sheet */
+/* react-d3-tree: override link color and kill all transitions for smooth panning */
 html .rd3t-tree-container .rd3t-link {
   fill: none;
   stroke: rgb(100, 116, 139);
@@ -24,6 +24,16 @@ html .rd3t-tree-container .rd3t-link {
 
 html.dark .rd3t-tree-container .rd3t-link {
   stroke: rgb(203, 213, 225);
+}
+
+html .rd3t-tree-container g.rd3t-node,
+html .rd3t-tree-container g.rd3t-leaf-node,
+html .rd3t-tree-container .rd3t-link {
+  transition: none !important;
+}
+
+html .rd3t-tree-container svg {
+  touch-action: none;
 }
 
 @layer components {

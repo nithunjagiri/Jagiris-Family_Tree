@@ -1,6 +1,7 @@
-import { lazy, Suspense } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { lazy, Suspense, useEffect } from 'react';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
+import { App as CapApp } from '@capacitor/app';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -57,7 +58,31 @@ function AdminRoute({ children }) {
   return children;
 }
 
+function useAndroidBackButton() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    const listener = CapApp.addListener('backButton', ({ canGoBack }) => {
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+        return;
+      }
+      if (location.pathname === '/' || location.pathname === '/login') {
+        CapApp.minimizeApp();
+      } else if (canGoBack || window.history.length > 1) {
+        navigate(-1);
+      } else {
+        CapApp.minimizeApp();
+      }
+    });
+    return () => { listener.then((l) => l.remove()); };
+  }, [navigate, location.pathname]);
+}
+
 export default function App() {
+  useAndroidBackButton();
+
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
