@@ -48,7 +48,7 @@ export default function TopBar({ onMenuClick }) {
         <Menu className="h-6 w-6" />
       </button>
       <h1 className="text-lg font-semibold text-gray-900 dark:text-white md:text-xl">
-        Jagiri's Family Memory
+        Jagiri's Kutumbam
       </h1>
       <div className="ml-auto flex items-center gap-2">
         <button
