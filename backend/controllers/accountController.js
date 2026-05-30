@@ -318,7 +318,7 @@ exports.patchProfile = async (req, res, next) => {
 
     res.json({
       token,
-      user: { id: u.id, username: u.username, email: u.email, isAdmin },
+      user: { id: u.id, username: u.username, email: u.email, isAdmin, first_name: u.first_name || null, last_name: u.last_name || null },
     });
   } catch (err) {
     next(err);

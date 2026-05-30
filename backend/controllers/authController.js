@@ -149,7 +149,7 @@ exports.register = async (req, res, next) => {
     await ensureUserHasDefaultFamily(user.id, user.username);
     const isAdmin = user.is_admin === true || user.username === 'nithun';
     const token = jwt.sign({ id: user.id, username: user.username, isAdmin }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
-    res.status(201).json({ token, user: { id: user.id, username: user.username, email: user.email, isAdmin } });
+    res.status(201).json({ token, user: { id: user.id, username: user.username, email: user.email, isAdmin, first_name: null, last_name: null } });
   } catch (err) {
     if (err.code === '23505') return res.status(400).json({ error: 'Username or email already exists' });
     next(err);
@@ -165,13 +165,22 @@ exports.login = async (req, res, next) => {
     let result;
     try {
       result = await db.query(
-        'SELECT id, username, email, password, COALESCE(is_admin, false) AS is_admin FROM users WHERE username = $1',
+        'SELECT id, username, email, password, COALESCE(is_admin, false) AS is_admin, first_name, last_name FROM users WHERE username = $1',
         [username]
       );
     } catch (err) {
       if (err.code === '42703') {
-        result = await db.query('SELECT id, username, email, password FROM users WHERE username = $1', [username]);
-        if (result.rows[0]) result.rows[0].is_admin = false;
+        try {
+          result = await db.query(
+            'SELECT id, username, email, password, COALESCE(is_admin, false) AS is_admin FROM users WHERE username = $1',
+            [username]
+          );
+        } catch (err2) {
+          if (err2.code === '42703') {
+            result = await db.query('SELECT id, username, email, password FROM users WHERE username = $1', [username]);
+            if (result.rows[0]) result.rows[0].is_admin = false;
+          } else throw err2;
+        }
       } else throw err;
     }
     const user = result.rows[0];
@@ -190,7 +199,7 @@ exports.login = async (req, res, next) => {
     await ensureUserHasDefaultFamily(user.id, user.username);
     const isAdmin = user.is_admin === true || user.username === 'nithun';
     const token = jwt.sign({ id: user.id, username: user.username, isAdmin }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
-    res.json({ token, user: { id: user.id, username: user.username, email: user.email, isAdmin } });
+    res.json({ token, user: { id: user.id, username: user.username, email: user.email, isAdmin, first_name: user.first_name || null, last_name: user.last_name || null } });
   } catch (err) {
     next(err);
   }

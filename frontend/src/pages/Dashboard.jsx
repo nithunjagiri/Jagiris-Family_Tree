@@ -259,7 +259,7 @@ export default function Dashboard() {
       : '0 4px 12px rgba(0,0,0,0.08)',
   };
 
-  const welcomeName = user?.username || user?.email || 'there';
+  const welcomeName = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.username || 'there';
 
   return (
     <div className="mx-auto flex w-full max-w-[1920px] flex-col gap-8 pb-6">
