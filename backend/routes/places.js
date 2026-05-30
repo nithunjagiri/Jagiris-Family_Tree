@@ -8,6 +8,7 @@ router.use(auth);
 router.use(resolveFamilyContext);
 
 router.get('/', placesController.list);
+router.get('/members-by-place', placesController.membersByPlace);
 router.post('/', placesController.validatePlace, placesController.create);
 router.delete('/:id', requireAdmin, placesController.remove);
 

@@ -35,6 +35,7 @@ import {
   birthsByDecade,
   deathsByYear,
   genderSlices,
+  isDeceased,
   livingCounts,
   upcomingBirthdays,
   birthsByYearRecent,
@@ -67,17 +68,19 @@ function useChartTheme() {
       dark,
       tick: dark ? '#94a3b8' : '#64748b',
       grid: dark ? '#334155' : '#e2e8f0',
-      tooltipBg: dark ? '#0f172a' : '#ffffff',
-      tooltipBorder: dark ? '#334155' : '#e2e8f0',
-      tooltipLabel: dark ? '#f1f5f9' : '#0f172a',
+      tooltipBg: dark ? '#1e293b' : '#ffffff',
+      tooltipBorder: dark ? '#475569' : '#e2e8f0',
+      tooltipLabel: dark ? '#f8fafc' : '#0f172a',
+      tooltipItem: dark ? '#e2e8f0' : '#334155',
     }),
     [dark]
   );
 }
 
-function ChartCard({ title, subtitle, icon: Icon, children, className }) {
+function ChartCard({ id, title, subtitle, icon: Icon, children, className }) {
   return (
     <div
+      id={id}
       className={cn(
         'flex flex-col rounded-2xl border border-gray-200/80 bg-white shadow-soft dark:border-gray-800 dark:bg-gray-900 dark:shadow-soft-dark',
         className
@@ -101,7 +104,7 @@ function ChartCard({ title, subtitle, icon: Icon, children, className }) {
   );
 }
 
-function StatTile({ label, value, hint, to, icon: Icon, accent }) {
+function StatTile({ label, value, hint, to, onClick, icon: Icon, accent }) {
   const inner = (
     <>
       <div className="flex items-start justify-between gap-3">
@@ -123,14 +126,19 @@ function StatTile({ label, value, hint, to, icon: Icon, accent }) {
       </div>
     </>
   );
+  const tileClass = 'group cursor-pointer rounded-2xl border border-gray-200/80 bg-white p-5 shadow-soft transition-all hover:border-primary-200 hover:shadow-md dark:border-gray-800 dark:bg-gray-900 dark:hover:border-primary-900';
   if (to) {
     return (
-      <Link
-        to={to}
-        className="group rounded-2xl border border-gray-200/80 bg-white p-5 shadow-soft transition-all hover:border-primary-200 hover:shadow-md dark:border-gray-800 dark:bg-gray-900 dark:hover:border-primary-900"
-      >
+      <Link to={to} className={tileClass}>
         {inner}
       </Link>
+    );
+  }
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={cn(tileClass, 'w-full text-left')}>
+        {inner}
+      </button>
     );
   }
   return (
@@ -186,7 +194,7 @@ export default function Dashboard() {
   const birthdaysSoon = useMemo(() => upcomingBirthdays(members, 60), [members]);
   const bloodGroupStats = useMemo(() => bloodGroupBreakdown(members), [members]);
   const selectedBloodGroupMembers = selectedBloodGroup
-    ? bloodGroupStats.membersByGroup[selectedBloodGroup] || []
+    ? (bloodGroupStats.membersByGroup[selectedBloodGroup] || []).filter((m) => !isDeceased(m))
     : [];
 
   const livingPieData = useMemo(
@@ -245,6 +253,10 @@ export default function Dashboard() {
     border: `1px solid ${chart.tooltipBorder}`,
     borderRadius: 10,
     fontSize: 12,
+    color: chart.tooltipItem,
+    boxShadow: chart.dark
+      ? '0 4px 20px rgba(0,0,0,0.5)'
+      : '0 4px 12px rgba(0,0,0,0.08)',
   };
 
   const welcomeName = user?.username || user?.email || 'there';
@@ -273,6 +285,7 @@ export default function Dashboard() {
           label="Living"
           value={living}
           hint="With current records"
+          to="/family-members?status=living"
           icon={Activity}
           accent="bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400"
         />
@@ -280,6 +293,7 @@ export default function Dashboard() {
           label="Deceased"
           value={deceased}
           hint="Recorded as not alive"
+          to="/family-members?status=deceased"
           icon={Activity}
           accent="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
         />
@@ -287,6 +301,7 @@ export default function Dashboard() {
           label="Birthdays (60 days)"
           value={birthdaysSoon.length}
           hint="Upcoming celebrations"
+          onClick={() => document.getElementById('upcoming-events')?.scrollIntoView({ behavior: 'smooth' })}
           icon={Cake}
           accent="bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
         />
@@ -294,6 +309,7 @@ export default function Dashboard() {
           label="Members with blood group"
           value={bloodGroupStats.totalWithBloodGroup}
           hint={`${Math.max(0, membersCount - bloodGroupStats.totalWithBloodGroup)} pending blood group`}
+          onClick={() => document.getElementById('blood-groups-section')?.scrollIntoView({ behavior: 'smooth' })}
           icon={Droplets}
           accent="bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400"
         />
@@ -325,6 +341,7 @@ export default function Dashboard() {
                     cursor={{ fill: chart.dark ? 'rgb(51 65 85 / 0.35)' : 'rgb(241 245 249 / 0.9)' }}
                     contentStyle={tooltipStyle}
                     labelStyle={{ color: chart.tooltipLabel, fontWeight: 600 }}
+                    itemStyle={{ color: chart.tooltipItem }}
                   />
                   <Bar dataKey="count" name="Members" fill="#3b82f6" radius={[6, 6, 0, 0]} maxBarSize={48} />
                 </BarChart>
@@ -364,6 +381,7 @@ export default function Dashboard() {
                     cursor={{ fill: chart.dark ? 'rgb(51 65 85 / 0.35)' : 'rgb(241 245 249 / 0.9)' }}
                     contentStyle={tooltipStyle}
                     labelStyle={{ color: chart.tooltipLabel, fontWeight: 600 }}
+                    itemStyle={{ color: chart.tooltipItem }}
                   />
                   <Bar dataKey="count" name="Members" fill="#60a5fa" radius={[4, 4, 0, 0]} maxBarSize={32} />
                 </BarChart>
@@ -400,7 +418,11 @@ export default function Dashboard() {
                       <Cell key={d.name} fill={LIVING_COLOR_MAP[d.name] || '#94a3b8'} />
                     ))}
                   </Pie>
-                  <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: chart.tooltipLabel }} />
+                  <Tooltip
+                    contentStyle={tooltipStyle}
+                    labelStyle={{ color: chart.tooltipLabel }}
+                    itemStyle={{ color: chart.tooltipItem }}
+                  />
                   <Legend
                     wrapperStyle={{ fontSize: 12 }}
                     formatter={(value) => <span className="text-gray-700 dark:text-gray-300">{value}</span>}
@@ -412,6 +434,7 @@ export default function Dashboard() {
         </ChartCard>
 
         <ChartCard
+          id="blood-groups-section"
           title="Blood groups"
           subtitle="Click a blood group or count to view members"
           icon={Droplets}
@@ -435,6 +458,7 @@ export default function Dashboard() {
                     cursor={{ fill: chart.dark ? 'rgb(51 65 85 / 0.35)' : 'rgb(241 245 249 / 0.9)' }}
                     contentStyle={tooltipStyle}
                     labelStyle={{ color: chart.tooltipLabel, fontWeight: 600 }}
+                    itemStyle={{ color: chart.tooltipItem }}
                     formatter={(v) => [`${v}`, 'Members']}
                   />
                   <Bar
@@ -496,6 +520,7 @@ export default function Dashboard() {
                     cursor={{ fill: chart.dark ? 'rgb(51 65 85 / 0.35)' : 'rgb(241 245 249 / 0.9)' }}
                     contentStyle={tooltipStyle}
                     labelStyle={{ color: chart.tooltipLabel, fontWeight: 600 }}
+                    itemStyle={{ color: chart.tooltipItem }}
                     formatter={(v) => [`${v}`, 'Members']}
                     labelFormatter={(y) => `Year ${y}`}
                   />
@@ -529,7 +554,11 @@ export default function Dashboard() {
                       <Cell key={entry.key} fill={GENDER_COLORS[entry.key] || GENDER_COLORS.unknown} />
                     ))}
                   </Pie>
-                  <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: chart.tooltipLabel }} />
+                  <Tooltip
+                    contentStyle={tooltipStyle}
+                    labelStyle={{ color: chart.tooltipLabel }}
+                    itemStyle={{ color: chart.tooltipItem }}
+                  />
                   <Legend
                     wrapperStyle={{ fontSize: 12 }}
                     formatter={(value) => <span className="text-gray-700 dark:text-gray-300">{value}</span>}
@@ -578,7 +607,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-gray-200/80 bg-white shadow-soft dark:border-gray-800 dark:bg-gray-900 dark:shadow-soft-dark lg:col-span-7">
+        <div id="upcoming-events" className="rounded-2xl border border-gray-200/80 bg-white shadow-soft dark:border-gray-800 dark:bg-gray-900 dark:shadow-soft-dark lg:col-span-7">
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4 dark:border-gray-800">
             <div className="flex items-center gap-2">
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-50 text-primary-600 dark:bg-primary-950/50 dark:text-primary-400">

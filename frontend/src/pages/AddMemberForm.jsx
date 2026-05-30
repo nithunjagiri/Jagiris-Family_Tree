@@ -12,6 +12,7 @@ import {
 import { findDuplicateMembers } from '../lib/memberDuplicates';
 import DuplicateMemberModal from '../components/DuplicateMemberModal';
 import { buildMemberLinkOptions } from '../lib/memberSelectOptions';
+import SearchableSelect from '../components/SearchableSelect';
 import { HIDE_RELATION_NAMES_IN_UI } from '../lib/appDisplaySettings';
 import { getApiErrorMessage } from '../lib/apiErrorMessage';
 
@@ -652,30 +653,30 @@ export default function AddMemberForm() {
           <div className="grid gap-6 sm:grid-cols-3">
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Father</label>
-              <select value={father_id} onChange={(e) => setFatherId(e.target.value)} className={inputClass}>
-                <option value="">— None —</option>
-                {memberOptions.filter((o) => toNum(o.value) !== toNum(id)).map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
+              <SearchableSelect
+                value={father_id}
+                onChange={setFatherId}
+                options={memberOptions.filter((o) => toNum(o.value) !== toNum(id))}
+                placeholder="— None —"
+              />
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Mother</label>
-              <select value={mother_id} onChange={(e) => setMotherId(e.target.value)} className={inputClass}>
-                <option value="">— None —</option>
-                {memberOptions.filter((o) => toNum(o.value) !== toNum(id)).map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
+              <SearchableSelect
+                value={mother_id}
+                onChange={setMotherId}
+                options={memberOptions.filter((o) => toNum(o.value) !== toNum(id))}
+                placeholder="— None —"
+              />
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Spouse</label>
-              <select value={spouse_id} onChange={(e) => setSpouseId(e.target.value)} className={inputClass}>
-                <option value="">— None —</option>
-                {memberOptions.filter((o) => toNum(o.value) !== toNum(id)).map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
+              <SearchableSelect
+                value={spouse_id}
+                onChange={setSpouseId}
+                options={memberOptions.filter((o) => toNum(o.value) !== toNum(id))}
+                placeholder="— None —"
+              />
             </div>
           </div>
           <div>

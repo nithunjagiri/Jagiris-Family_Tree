@@ -121,3 +121,27 @@ exports.remove = async (req, res, next) => {
     next(err);
   }
 };
+
+exports.membersByPlace = async (req, res, next) => {
+  try {
+    const place = (req.query.place || '').trim();
+    if (!place) return res.status(400).json({ error: 'place query parameter required' });
+
+    const result = await db.query(
+      `SELECT fm.id, fm.name, fm.surname, fm.date_of_birth, fm.gender, fm.phone, fm.profile_photo
+       FROM family_members fm
+       LEFT JOIN places p ON p.id = fm.birth_place_id AND p.family_id = fm.family_id
+       WHERE fm.family_id = $1
+         AND (
+           LOWER(TRIM(COALESCE(p.name, ''))) = LOWER($2)
+           OR LOWER(TRIM(COALESCE(fm.birth_place, ''))) = LOWER($2)
+         )
+       ORDER BY fm.name ASC, fm.surname ASC`,
+      [req.familyId, place.toLowerCase()]
+    );
+
+    res.json({ place, members: result.rows });
+  } catch (err) {
+    next(err);
+  }
+};

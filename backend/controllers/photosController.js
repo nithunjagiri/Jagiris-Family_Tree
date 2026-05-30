@@ -19,27 +19,35 @@ exports.list = async (req, res, next) => {
 
 exports.upload = async (req, res, next) => {
   try {
-    if (!req.file) return res.status(400).json({ error: 'Image file required' });
-    const title = req.body.title || req.file.originalname || 'Untitled';
+    const files = req.files;
+    if (!files || files.length === 0) return res.status(400).json({ error: 'At least one image file is required' });
+    if (files.length > 5) return res.status(400).json({ error: 'Maximum 5 images per upload' });
 
-    const image_path = useCloudinary
-      ? req.file.path
-      : `/uploads/gallery/${req.file.filename}`;
+    const title = req.body.title || files[0].originalname || 'Untitled';
+    const inserted = [];
 
-    const result = await db.query(
-      'INSERT INTO photos (family_id, title, image_path, uploaded_at) VALUES ($1, $2, $3, NOW()) RETURNING id, family_id, title, image_path, uploaded_at',
-      [req.familyId, title, image_path]
-    );
-    const row = result.rows[0];
+    for (const file of files) {
+      const image_path = useCloudinary
+        ? file.path
+        : `/uploads/gallery/${file.filename}`;
+
+      const result = await db.query(
+        'INSERT INTO photos (family_id, title, image_path, uploaded_at) VALUES ($1, $2, $3, NOW()) RETURNING id, family_id, title, image_path, uploaded_at',
+        [req.familyId, title, image_path]
+      );
+      inserted.push(result.rows[0]);
+    }
+
     await logAudit({
       userId: req.user?.id,
       username: req.user?.username,
       action: 'photo.upload',
       entityType: 'photo',
-      entityId: row.id,
-      summary: title,
+      entityId: inserted[0].id,
+      summary: `${title} (${inserted.length} photo${inserted.length > 1 ? 's' : ''})`,
     });
-    res.status(201).json(row);
+
+    res.status(201).json(inserted.length === 1 ? inserted[0] : inserted);
   } catch (err) {
     next(err);
   }

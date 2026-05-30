@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { KeyRound, Download, UserX, Shield, ClipboardCheck, User } from 'lucide-react';
+import { KeyRound, Download, UserX, Shield, ClipboardCheck, User, Camera, X } from 'lucide-react';
 import { accountApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../lib/utils';
 import { getApiErrorMessage } from '../lib/apiErrorMessage';
+import { resolveBackendPublicUrl } from '../lib/backendOrigin';
 
 const PROFILE_GENDER_OPTIONS = [
   { value: '', label: 'Not set' },
@@ -47,6 +48,10 @@ export default function AccountPrivacy() {
   const [profileMsg, setProfileMsg] = useState('');
   const [profileErr, setProfileErr] = useState('');
   const [profileSaving, setProfileSaving] = useState(false);
+  const [profilePhotoFile, setProfilePhotoFile] = useState(null);
+  const [profilePhotoPreview, setProfilePhotoPreview] = useState(null);
+  const [removePhoto, setRemovePhoto] = useState(false);
+  const photoInputRef = useRef(null);
   const [privacyReadAt, setPrivacyReadAt] = useState(null);
   const [privacyLoadErr, setPrivacyLoadErr] = useState('');
   const [ackLoading, setAckLoading] = useState(false);
@@ -106,6 +111,9 @@ export default function AccountPrivacy() {
   const startProfileEdit = () => {
     setProfileErr('');
     setProfileMsg('');
+    setProfilePhotoFile(null);
+    setProfilePhotoPreview(null);
+    setRemovePhoto(false);
     if (profileUser) applyUserToProfileForm(profileUser);
     setProfileEditing(true);
   };
@@ -113,8 +121,29 @@ export default function AccountPrivacy() {
   const cancelProfileEdit = () => {
     setProfileErr('');
     setProfileMsg('');
+    setProfilePhotoFile(null);
+    setProfilePhotoPreview(null);
+    setRemovePhoto(false);
     if (profileUser) applyUserToProfileForm(profileUser);
     setProfileEditing(false);
+  };
+
+  const handlePhotoSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      setProfileErr('Only JPEG, PNG, GIF, or WebP images are allowed.');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setProfileErr('Profile photo must be under 2 MB.');
+      return;
+    }
+    setProfileErr('');
+    setProfilePhotoFile(file);
+    setProfilePhotoPreview(URL.createObjectURL(file));
+    setRemovePhoto(false);
   };
 
   const handleProfileSave = async (e) => {
@@ -134,12 +163,16 @@ export default function AccountPrivacy() {
         city: profileForm.city.trim(),
         village: profileForm.village.trim(),
       };
-      const { data } = await accountApi.updateProfile(payload);
+      if (removePhoto) payload.remove_profile_photo = 'true';
+      const { data } = await accountApi.updateProfile(payload, profilePhotoFile || undefined);
       login(data.token, data.user);
       const r = await accountApi.getPrivacySettings();
       setProfileUser(r.data.user);
       applyUserToProfileForm(r.data.user);
       setProfileEditing(false);
+      setProfilePhotoFile(null);
+      setProfilePhotoPreview(null);
+      setRemovePhoto(false);
       setProfileMsg('Profile saved.');
     } catch (err) {
       setProfileErr(getApiErrorMessage(err, 'Could not save profile.'));
@@ -186,10 +219,15 @@ export default function AccountPrivacy() {
       const blob = new Blob([res.data], { type: 'application/json' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
+      a.style.display = 'none';
       a.href = url;
       a.download = `jagiris-family-export-${Date.now()}.json`;
+      document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      }, 200);
     } catch (err) {
       alert(getApiErrorMessage(err, 'Export failed.'));
     } finally {
@@ -251,7 +289,19 @@ export default function AccountPrivacy() {
         </div>
 
         {!profileEditing ? (
-          <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+          <>
+            <div className="mb-4 flex justify-center sm:justify-start">
+              <div className="h-20 w-20 overflow-hidden rounded-full border-2 border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800">
+                {profileUser?.profile_photo ? (
+                  <img src={resolveBackendPublicUrl(profileUser.profile_photo)} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-gray-400">
+                    <User className="h-10 w-10" />
+                  </div>
+                )}
+              </div>
+            </div>
+            <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
             <div>
               <dt className="text-gray-500 dark:text-gray-400">Username</dt>
               <dd className="font-medium text-gray-900 dark:text-white">{profileUser?.username ?? user?.username ?? '—'}</dd>
@@ -297,8 +347,54 @@ export default function AccountPrivacy() {
               </dd>
             </div>
           </dl>
+          </>
         ) : (
           <form onSubmit={handleProfileSave} className="space-y-4">
+            <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-start">
+              <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-full border-2 border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800">
+                {profilePhotoPreview ? (
+                  <img src={profilePhotoPreview} alt="" className="h-full w-full object-cover" />
+                ) : !removePhoto && profileUser?.profile_photo ? (
+                  <img src={resolveBackendPublicUrl(profileUser.profile_photo)} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-gray-400">
+                    <User className="h-10 w-10" />
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => photoInputRef.current?.click()}
+                  className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 text-white opacity-0 transition-opacity hover:opacity-100"
+                >
+                  <Camera className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="text-center sm:text-left">
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  className="hidden"
+                  onChange={handlePhotoSelect}
+                />
+                <button type="button" onClick={() => photoInputRef.current?.click()} className="text-sm font-medium text-primary-600 hover:underline dark:text-primary-400">
+                  Change photo
+                </button>
+                {(profileUser?.profile_photo || profilePhotoFile) && !removePhoto && (
+                  <button
+                    type="button"
+                    onClick={() => { setRemovePhoto(true); setProfilePhotoFile(null); setProfilePhotoPreview(null); }}
+                    className="ml-3 text-sm font-medium text-red-600 hover:underline dark:text-red-400"
+                  >
+                    Remove
+                  </button>
+                )}
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  JPEG, PNG, GIF, or WebP. Max 2 MB. Optional.
+                </p>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Username</label>

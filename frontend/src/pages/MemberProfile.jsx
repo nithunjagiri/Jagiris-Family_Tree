@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Pencil, User, Users, Mail, Phone, MessageCircle, MapPin, Briefcase, Calendar, Activity } from 'lucide-react';
 import { familyMembersApi } from '../services/api';
 import { formatCalendarLong } from '../lib/calendarDate';
 import { HIDE_RELATION_NAMES_IN_UI } from '../lib/appDisplaySettings';
 import { resolveBackendPublicUrl } from '../lib/backendOrigin';
+
+const ProfileMiniMap = lazy(() => import('../components/ProfileMiniMap'));
 
 function Field({ icon: Icon, label, value }) {
   if (value == null || value === '') return null;
@@ -124,12 +126,21 @@ export default function MemberProfile() {
                 </div>
               )}
             </div>
-            <div className="text-center sm:text-left">
+            <div className="flex-1 text-center sm:text-left">
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{fullName}</h1>
               {!HIDE_RELATION_NAMES_IN_UI && member.relation ? (
                 <p className="text-primary-600 dark:text-primary-400">{member.relation}</p>
               ) : null}
             </div>
+            {member.birth_place_lat && member.birth_place_lng && (
+              <Suspense fallback={<div className="h-28 w-36 animate-pulse rounded-xl bg-gray-200 dark:bg-gray-700 sm:h-32 sm:w-40" />}>
+                <ProfileMiniMap
+                  lat={Number(member.birth_place_lat)}
+                  lng={Number(member.birth_place_lng)}
+                  label={birthPlace}
+                />
+              </Suspense>
+            )}
           </div>
         </div>
         <div className="p-6">

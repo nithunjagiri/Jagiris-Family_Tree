@@ -137,9 +137,12 @@ export const familyMembersApi = {
 
 export const photosApi = {
   list: () => api.get('/photos'),
-  upload: (file, title) => {
+  upload: (files, title) => {
     const form = new FormData();
-    form.append('image', file);
+    const fileList = Array.isArray(files) ? files : [files];
+    for (const file of fileList) {
+      form.append('images', file);
+    }
     if (title) form.append('title', title);
     return api.post('/photos', form, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
@@ -157,6 +160,7 @@ export const familyTreeApi = {
 
 export const placesApi = {
   list: () => api.get('/places'),
+  membersByPlace: (place) => api.get('/places/members-by-place', { params: { place } }),
   create: (data) => api.post('/places', data),
   remove: (id) => api.delete(`/places/${id}`),
 };
@@ -167,7 +171,17 @@ export const searchApi = {
 
 export const accountApi = {
   getPrivacySettings: () => api.get('/account/privacy'),
-  updateProfile: (data) => api.patch('/account/profile', data),
+  updateProfile: (data, photoFile) => {
+    if (photoFile || data.remove_profile_photo) {
+      const form = new FormData();
+      Object.entries(data).forEach(([key, val]) => {
+        if (val !== undefined) form.append(key, val);
+      });
+      if (photoFile) form.append('profile_photo', photoFile);
+      return api.patch('/account/profile', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+    }
+    return api.patch('/account/profile', data);
+  },
   acknowledgePrivacyNotice: () => api.patch('/account/privacy', { acknowledgePrivacyNotice: true }),
   changePassword: (data) => api.post('/account/change-password', data),
   exportData: () => api.get('/account/export', { responseType: 'blob' }),

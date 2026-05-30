@@ -53,7 +53,7 @@ export default function PhotoGallery() {
           className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 font-medium text-white transition-colors hover:bg-primary-700"
         >
           <Upload className="h-5 w-5" />
-          Upload Photo
+          Upload Photos
         </Link>
       </div>
 

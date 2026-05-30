@@ -19,6 +19,7 @@ async function ensurePlacesAuditSchema() {
   await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS city_village VARCHAR(255)');
   await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS city VARCHAR(255)');
   await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS village VARCHAR(255)');
+  await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_photo TEXT');
 
   await db.query(`
     CREATE TABLE IF NOT EXISTS audit_logs (

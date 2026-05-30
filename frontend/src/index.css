@@ -54,4 +54,9 @@ html .rd3t-tree-container svg {
       transparent 0
     );
   }
+
+  .leaflet-map-wrap {
+    isolation: isolate;
+    z-index: 0;
+  }
 }

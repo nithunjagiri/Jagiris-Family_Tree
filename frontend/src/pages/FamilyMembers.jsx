@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useId } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { UserPlus, Pencil, Trash2, User, Search, LayoutGrid, List, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { familyMembersApi } from '../services/api';
@@ -8,6 +8,7 @@ import { formatCalendarLong } from '../lib/calendarDate';
 import { HIDE_RELATION_NAMES_IN_UI } from '../lib/appDisplaySettings';
 import { resolveBackendPublicUrl } from '../lib/backendOrigin';
 import { getApiErrorMessage } from '../lib/apiErrorMessage';
+import { isDeceased } from '../lib/dashboardAnalytics';
 
 function displayName(m) {
   return [m.name, m.surname].filter(Boolean).join(' ') || m.name || '';
@@ -15,34 +16,43 @@ function displayName(m) {
 
 function MemberActions({ member, isAdmin, deletingId, onDelete }) {
   return (
-    <div className="flex gap-2">
+    <div className="flex gap-1.5 sm:gap-2">
       <Link
         to={`/family-members/edit/${member.id}`}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 sm:px-3 sm:py-2 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
       >
-        <Pencil className="h-4 w-4" />
-        Edit
+        <Pencil className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+        <span className="hidden sm:inline">Edit</span>
       </Link>
       {isAdmin && (
         <button
           type="button"
           onClick={() => onDelete(member.id, member)}
           disabled={deletingId === member.id}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900 dark:bg-gray-800 dark:text-red-400 dark:hover:bg-red-900/20"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-2 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 sm:px-3 sm:py-2 dark:border-red-900 dark:bg-gray-800 dark:text-red-400 dark:hover:bg-red-900/20"
         >
-          <Trash2 className="h-4 w-4" />
-          {deletingId === member.id ? 'Deleting...' : 'Delete'}
+          <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          <span className="hidden sm:inline">{deletingId === member.id ? 'Deleting...' : 'Delete'}</span>
         </button>
       )}
     </div>
   );
 }
 
-function MemberAvatar({ m, className, placeholderIconClassName = 'h-12 w-12' }) {
+function MemberAvatar({ m, className, placeholderIconClassName = 'h-12 w-12', onPhotoClick }) {
+  const handleClick = (e) => {
+    if (m.profile_photo && onPhotoClick) {
+      e.stopPropagation();
+      onPhotoClick(resolveBackendPublicUrl(m.profile_photo), displayName(m));
+    }
+  };
+
   return (
     <div
+      onClick={handleClick}
       className={cn(
         'shrink-0 overflow-hidden rounded-full border-2 border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800',
+        m.profile_photo && onPhotoClick && 'cursor-pointer ring-offset-2 transition-transform hover:scale-105 active:scale-95',
         className
       )}
     >
@@ -95,6 +105,8 @@ export default function FamilyMembers() {
   const searchInputId = `family-members-search-input-${uid}`;
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const statusFilter = searchParams.get('status');
   const { isAdmin } = useAuth();
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -103,6 +115,16 @@ export default function FamilyMembers() {
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState('grid');
   const [saveFlash, setSaveFlash] = useState(null);
+  const [lightboxPhoto, setLightboxPhoto] = useState(null);
+
+  useEffect(() => {
+    if (!lightboxPhoto) return;
+    const handleKey = (e) => {
+      if (e.key === 'Escape') setLightboxPhoto(null);
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [lightboxPhoto]);
 
   const load = () =>
     familyMembersApi
@@ -122,15 +144,23 @@ export default function FamilyMembers() {
   }, [location.state, location.pathname, navigate]);
 
   const filteredMembers = useMemo(() => {
+    let result = members;
+
+    if (statusFilter === 'living') {
+      result = result.filter((m) => !isDeceased(m));
+    } else if (statusFilter === 'deceased') {
+      result = result.filter((m) => isDeceased(m));
+    }
+
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return members;
-    return members.filter((m) => {
+    if (!q) return result;
+    return result.filter((m) => {
       const parts = [m.name, m.surname];
       if (!HIDE_RELATION_NAMES_IN_UI && m.relation) parts.push(m.relation);
       const hay = parts.filter(Boolean).join(' ').toLowerCase();
       return hay.includes(q);
     });
-  }, [members, searchQuery]);
+  }, [members, searchQuery, statusFilter]);
 
   const handleDelete = async (id, member) => {
     const name = displayName(member);
@@ -176,7 +206,13 @@ export default function FamilyMembers() {
       )}
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Family Members</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            {statusFilter === 'living'
+              ? 'Living Members'
+              : statusFilter === 'deceased'
+                ? 'Deceased Members'
+                : 'Family Members'}
+          </h1>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <button
               type="button"
@@ -250,18 +286,35 @@ export default function FamilyMembers() {
         )}
       </div>
 
+      {statusFilter && (
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-sm font-medium text-primary-700 dark:border-primary-800 dark:bg-primary-950/40 dark:text-primary-300">
+            {statusFilter === 'living' ? 'Living members' : 'Deceased members'}
+          </span>
+          <button
+            type="button"
+            onClick={() => setSearchParams({})}
+            className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+          >
+            <X className="h-3.5 w-3.5" />
+            Clear filter
+          </button>
+        </div>
+      )}
+
       {viewMode === 'grid' ? (
         <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {filteredMembers.map((m) => (
             <div
               key={m.id}
-              className="rounded-2xl border border-gray-200 bg-white p-4 shadow-soft transition-shadow hover:shadow-lg dark:border-gray-800 dark:bg-gray-900 dark:shadow-soft-dark"
+              onClick={() => navigate(`/family-members/${m.id}`)}
+              className="cursor-pointer rounded-2xl border border-gray-200 bg-white p-4 shadow-soft transition-shadow hover:shadow-lg dark:border-gray-800 dark:bg-gray-900 dark:shadow-soft-dark"
             >
               <div className="flex flex-col items-center text-center">
-                <MemberAvatar m={m} className="mb-3 h-16 w-16" placeholderIconClassName="h-8 w-8" />
+                <MemberAvatar m={m} className="mb-3 h-16 w-16" placeholderIconClassName="h-8 w-8" onPhotoClick={(url, name) => setLightboxPhoto({ url, name })} />
                 <h3 className="text-base font-semibold text-gray-900 dark:text-white">{displayName(m)}</h3>
                 <MemberMeta m={m} members={members} />
-                <div className="mt-3">
+                <div className="mt-3" onClick={(e) => e.stopPropagation()}>
                   <MemberActions member={m} isAdmin={isAdmin} deletingId={deletingId} onDelete={handleDelete} />
                 </div>
               </div>
@@ -273,15 +326,16 @@ export default function FamilyMembers() {
           {filteredMembers.map((m) => (
             <li
               key={m.id}
-              className="rounded-2xl border border-gray-200 bg-white p-4 shadow-soft transition-shadow hover:shadow-lg dark:border-gray-800 dark:bg-gray-900 dark:shadow-soft-dark"
+              onClick={() => navigate(`/family-members/${m.id}`)}
+              className="cursor-pointer rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-soft transition-shadow hover:shadow-lg dark:border-gray-800 dark:bg-gray-900 dark:shadow-soft-dark"
             >
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                <MemberAvatar m={m} className="h-16 w-16 sm:h-20 sm:w-20" placeholderIconClassName="h-8 w-8 sm:h-10 sm:w-10" />
-                <div className="min-w-0 flex-1 text-center sm:text-left">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{displayName(m)}</h3>
+              <div className="flex items-center gap-3 sm:gap-4">
+                <MemberAvatar m={m} className="h-12 w-12 sm:h-14 sm:w-14" placeholderIconClassName="h-6 w-6 sm:h-7 sm:w-7" onPhotoClick={(url, name) => setLightboxPhoto({ url, name })} />
+                <div className="min-w-0 flex-1">
+                  <h3 className="truncate text-sm font-semibold text-gray-900 dark:text-white sm:text-base">{displayName(m)}</h3>
                   <MemberMeta m={m} members={members} />
                 </div>
-                <div className="flex justify-center sm:justify-end">
+                <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
                   <MemberActions member={m} isAdmin={isAdmin} deletingId={deletingId} onDelete={handleDelete} />
                 </div>
               </div>
@@ -300,6 +354,35 @@ export default function FamilyMembers() {
         <p className="rounded-xl border border-dashed border-gray-300 py-12 text-center text-gray-500 dark:border-gray-700 dark:text-gray-400">
           No family members yet. Add one to get started.
         </p>
+      )}
+
+      {/* Profile photo lightbox */}
+      {lightboxPhoto && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => setLightboxPhoto(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setLightboxPhoto(null)}
+            className="absolute right-4 top-4 rounded-full bg-black/50 p-2 text-white transition-colors hover:bg-black/70"
+            aria-label="Close"
+          >
+            <X className="h-6 w-6" />
+          </button>
+          <div className="flex flex-col items-center gap-4 px-6" onClick={(e) => e.stopPropagation()}>
+            <div className="h-64 w-64 overflow-hidden rounded-full border-4 border-white/20 shadow-2xl sm:h-80 sm:w-80">
+              <img
+                src={lightboxPhoto.url}
+                alt={lightboxPhoto.name}
+                className="h-full w-full object-cover"
+              />
+            </div>
+            {lightboxPhoto.name && (
+              <p className="text-center text-lg font-medium text-white">{lightboxPhoto.name}</p>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { Link, useSearchParams } from 'react-router-dom';
 import L from 'leaflet';
-import { MapPin, Plus, Trash2 } from 'lucide-react';
+import { MapPin, Plus, Trash2, X, Users, ChevronRight } from 'lucide-react';
 import { placesApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../lib/utils';
 import { getApiErrorMessage } from '../lib/apiErrorMessage';
+import { resolveBackendPublicUrl } from '../lib/backendOrigin';
 
 import 'leaflet/dist/leaflet.css';
 
@@ -29,8 +31,22 @@ function MapResize() {
   return null;
 }
 
+function FlyToLocation({ lat, lng }) {
+  const map = useMap();
+  useEffect(() => {
+    if (lat != null && lng != null) {
+      setTimeout(() => map.flyTo([lat, lng], 13, { duration: 1.2 }), 400);
+    }
+  }, [map, lat, lng]);
+  return null;
+}
+
 export default function PlacesMap() {
   const { isAdmin } = useAuth();
+  const [searchParams] = useSearchParams();
+  const highlightLat = searchParams.get('lat') ? Number(searchParams.get('lat')) : null;
+  const highlightLng = searchParams.get('lng') ? Number(searchParams.get('lng')) : null;
+  const highlightName = searchParams.get('name') || null;
   const [data, setData] = useState({ birthPlaces: [], pins: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -41,6 +57,9 @@ export default function PlacesMap() {
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
+  const [selectedPlace, setSelectedPlace] = useState(null);
+  const [placeMembers, setPlaceMembers] = useState([]);
+  const [placeMembersLoading, setPlaceMembersLoading] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -64,14 +83,15 @@ export default function PlacesMap() {
   }, []);
 
   const center = useMemo(() => {
+    if (highlightLat != null && highlightLng != null) return [highlightLat, highlightLng];
     const pins = data.pins || [];
     if (pins.length === 0) return [20, 0];
     const lat = pins.reduce((s, p) => s + Number(p.latitude), 0) / pins.length;
     const lng = pins.reduce((s, p) => s + Number(p.longitude), 0) / pins.length;
     return [lat, lng];
-  }, [data.pins]);
+  }, [data.pins, highlightLat, highlightLng]);
 
-  const zoom = (data.pins || []).length === 0 ? 2 : Math.min(12, 4 + Math.floor(data.pins.length / 2));
+  const zoom = highlightLat != null ? 12 : (data.pins || []).length === 0 ? 2 : Math.min(12, 4 + Math.floor(data.pins.length / 2));
 
   const handleAddPin = async (e) => {
     e.preventDefault();
@@ -105,6 +125,25 @@ export default function PlacesMap() {
     } catch (err) {
       alert(getApiErrorMessage(err, 'Delete failed'));
     }
+  };
+
+  const handlePlaceClick = async (place) => {
+    setSelectedPlace(place);
+    setPlaceMembers([]);
+    setPlaceMembersLoading(true);
+    try {
+      const res = await placesApi.membersByPlace(place);
+      setPlaceMembers(res.data.members || []);
+    } catch (err) {
+      setPlaceMembers([]);
+    } finally {
+      setPlaceMembersLoading(false);
+    }
+  };
+
+  const closePlaceModal = () => {
+    setSelectedPlace(null);
+    setPlaceMembers([]);
   };
 
   return (
@@ -211,10 +250,18 @@ export default function PlacesMap() {
             <div className={cn('relative h-[420px] w-full md:h-[480px]', 'leaflet-map-wrap')}>
               <MapContainer center={center} zoom={zoom} className="h-full w-full" scrollWheelZoom>
                 <MapResize />
+                {highlightLat != null && highlightLng != null && (
+                  <FlyToLocation lat={highlightLat} lng={highlightLng} />
+                )}
                 <TileLayer
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
+                {highlightLat != null && highlightLng != null && (
+                  <Marker position={[highlightLat, highlightLng]}>
+                    <Popup>{highlightName || 'Selected location'}</Popup>
+                  </Marker>
+                )}
                 {(data.pins || []).map((p) => (
                   <Marker key={p.id} position={[Number(p.latitude), Number(p.longitude)]}>
                     <Popup>
@@ -276,21 +323,89 @@ export default function PlacesMap() {
                 {(data.birthPlaces || []).map((row) => (
                   <li
                     key={row.place}
-                    className="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-800/80"
+                    onClick={() => handlePlaceClick(row.place)}
+                    className="flex cursor-pointer items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2 transition-colors hover:bg-primary-50 dark:bg-gray-800/80 dark:hover:bg-primary-950/30"
                   >
                     <span className="font-medium text-gray-800 dark:text-gray-200">{row.place}</span>
-                    <span className="shrink-0 text-gray-500 dark:text-gray-400">{row.member_count} members</span>
+                    <span className="flex items-center gap-1 shrink-0 text-gray-500 dark:text-gray-400">
+                      {row.member_count} members
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </span>
                   </li>
                 ))}
               </ul>
             )}
             <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-              To geocode these automatically later, export data from Account &amp; privacy and use your preferred GIS
-              workflow—this release keeps the map focused on explicit family pins you choose.
+              Click a place to view its members. To geocode these automatically later, export data from Account &amp; privacy
+              and use your preferred GIS workflow.
             </p>
           </div>
         </div>
       </div>
+
+      {selectedPlace && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={closePlaceModal}>
+          <div className="absolute inset-0 bg-black/50" />
+          <div
+            className="relative z-10 w-full max-w-lg max-h-[80vh] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-700">
+              <div className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-primary-600" />
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{selectedPlace}</h2>
+              </div>
+              <button
+                type="button"
+                onClick={closePlaceModal}
+                className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="overflow-y-auto p-4" style={{ maxHeight: 'calc(80vh - 72px)' }}>
+              {placeMembersLoading ? (
+                <div className="flex justify-center py-8">
+                  <div className="h-7 w-7 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
+                </div>
+              ) : placeMembers.length === 0 ? (
+                <p className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">No members found for this place.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {placeMembers.map((m) => (
+                    <li key={m.id}>
+                      <Link
+                        to={`/family-members/${m.id}`}
+                        onClick={closePlaceModal}
+                        className="flex items-center gap-3 rounded-xl border border-gray-100 px-3 py-2.5 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/60"
+                      >
+                        <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800">
+                          {m.profile_photo ? (
+                            <img src={resolveBackendPublicUrl(m.profile_photo)} alt="" className="h-full w-full object-cover" />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-gray-400">
+                              <Users className="h-5 w-5" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium text-gray-900 dark:text-white">
+                            {[m.name, m.surname].filter(Boolean).join(' ') || 'Unnamed'}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            {[m.gender, m.date_of_birth ? `DOB: ${String(m.date_of_birth).slice(0, 10)}` : null].filter(Boolean).join(' · ') || '—'}
+                          </p>
+                        </div>
+                        <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

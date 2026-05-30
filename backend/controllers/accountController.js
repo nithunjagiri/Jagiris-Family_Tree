@@ -4,12 +4,16 @@ const db = require('../database/db');
 const { body, validationResult } = require('express-validator');
 const { logAudit } = require('../lib/auditLog');
 const { ensurePlacesAuditSchema } = require('../database/ensurePlacesAuditSchema');
+const { useCloudinary } = require('../middleware/upload');
+const path = require('path');
+const fs = require('fs');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'secret';
 const JWT_EXPIRY = '7d';
 const GENDER_VALUES = ['female', 'male', 'non_binary', 'other', 'prefer_not_to_say'];
 
 const USER_PROFILE_SELECTS = [
+  'id, username, email, first_name, last_name, phone, gender, date_of_birth, city, village, city_village, profile_photo',
   'id, username, email, first_name, last_name, phone, gender, date_of_birth, city, village, city_village',
   'id, username, email, first_name, last_name, phone, gender, date_of_birth, city, village',
   'id, username, email, first_name, last_name, phone, gender, date_of_birth',
@@ -31,6 +35,7 @@ async function selectUserProfileForAccount(userId) {
       row.phone = row.phone ?? null;
       row.gender = row.gender ?? null;
       row.date_of_birth = row.date_of_birth ?? null;
+      row.profile_photo = row.profile_photo ?? null;
       return u;
     } catch (e) {
       lastErr = e;
@@ -186,6 +191,15 @@ exports.patchProfile = async (req, res, next) => {
     const city = cityRaw === '' ? null : cityRaw;
     const village = villageRaw === '' ? null : villageRaw;
 
+    let profilePhoto = undefined;
+    if (req.file) {
+      profilePhoto = useCloudinary
+        ? req.file.path
+        : `/uploads/profiles/${req.file.filename}`;
+    } else if (req.body.remove_profile_photo === 'true') {
+      profilePhoto = null;
+    }
+
     const dupUser = await db.query(
       'SELECT id FROM users WHERE LOWER(TRIM(username)) = LOWER(TRIM($1)) AND id <> $2',
       [username, req.user.id]
@@ -197,6 +211,21 @@ exports.patchProfile = async (req, res, next) => {
       [email, req.user.id]
     );
     if (dupEmail.rows[0]) return res.status(400).json({ error: 'That email is already in use' });
+
+    if (profilePhoto !== undefined) {
+      try {
+        if (profilePhoto === null) {
+          const old = await db.query('SELECT profile_photo FROM users WHERE id = $1', [req.user.id]);
+          if (old.rows[0]?.profile_photo && !/^https?:\/\//.test(old.rows[0].profile_photo)) {
+            const fullPath = path.join(__dirname, '..', old.rows[0].profile_photo);
+            if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+          }
+        }
+        await db.query('UPDATE users SET profile_photo = $1 WHERE id = $2', [profilePhoto, req.user.id]);
+      } catch (e) {
+        if (e.code !== '42703') throw e;
+      }
+    }
 
     try {
       await db.query(
