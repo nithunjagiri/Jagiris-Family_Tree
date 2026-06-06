@@ -65,15 +65,7 @@ export default function Login() {
               />
             </div>
             <div>
-              <div className="mb-1.5 flex items-center justify-between gap-2">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Password</label>
-                <Link
-                  to="/forgot-password"
-                  className="text-sm font-medium text-primary-600 hover:underline dark:text-primary-400"
-                >
-                  Forgot password?
-                </Link>
-              </div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Password</label>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
@@ -91,6 +83,14 @@ export default function Login() {
                 >
                   {showPassword ? <EyeOff className="h-5 w-5" aria-hidden /> : <Eye className="h-5 w-5" aria-hidden />}
                 </button>
+              </div>
+              <div className="mt-2 text-right">
+                <Link
+                  to="/forgot-password"
+                  className="text-sm font-medium text-primary-600 hover:underline dark:text-primary-400"
+                >
+                  Forgot password?
+                </Link>
               </div>
             </div>
             {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}

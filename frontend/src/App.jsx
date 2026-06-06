@@ -25,6 +25,7 @@ import AdminUsers from './pages/AdminUsers';
 import AdminUserEdit from './pages/AdminUserEdit';
 import AdminUserCreate from './pages/AdminUserCreate';
 import AdminPortalLayout from './components/AdminPortalLayout';
+import AdminAnnouncements from './pages/AdminAnnouncements';
 
 function PrivateRoute({ children }) {
   const { isAuth, loading } = useAuth();
@@ -135,6 +136,7 @@ export default function App() {
           <Route path="users/new" element={<AdminUserCreate />} />
           <Route path="users/:id/edit" element={<AdminUserEdit />} />
           <Route path="users" element={<AdminUsers />} />
+          <Route path="announcements" element={<AdminAnnouncements />} />
           <Route path="audit" element={<AdminAudit />} />
         </Route>
       </Route>

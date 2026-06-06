@@ -106,6 +106,7 @@ async function ensurePlacesAuditSchema() {
   `);
 
   await db.query('ALTER TABLE events ADD COLUMN IF NOT EXISTS family_id INTEGER REFERENCES families(id) ON DELETE CASCADE');
+  await db.query('ALTER TABLE events ADD COLUMN IF NOT EXISTS image_path TEXT');
   await db.query('ALTER TABLE photos ADD COLUMN IF NOT EXISTS family_id INTEGER REFERENCES families(id) ON DELETE CASCADE');
   await db.query('ALTER TABLE places ADD COLUMN IF NOT EXISTS family_id INTEGER REFERENCES families(id) ON DELETE CASCADE');
 
@@ -287,6 +288,46 @@ async function ensurePlacesAuditSchema() {
   await db.query('CREATE INDEX IF NOT EXISTS idx_family_members_residence_place_id ON family_members (residence_place_id)');
   await db.query('CREATE INDEX IF NOT EXISTS idx_family_members_created_by ON family_members (created_by)');
   await db.query('CREATE INDEX IF NOT EXISTS idx_family_members_updated_by ON family_members (updated_by)');
+
+  // ── Push notification infrastructure ──
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS push_notification_tokens (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token TEXT NOT NULL,
+      platform VARCHAR(16) NOT NULL DEFAULT 'android',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (user_id, token)
+    )
+  `);
+  await db.query('CREATE INDEX IF NOT EXISTS idx_push_tokens_user_id ON push_notification_tokens (user_id)');
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS announcements (
+      id SERIAL PRIMARY KEY,
+      family_id INTEGER REFERENCES families(id) ON DELETE CASCADE,
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      title VARCHAR(500) NOT NULL,
+      body TEXT,
+      sent_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await db.query('CREATE INDEX IF NOT EXISTS idx_announcements_family_id ON announcements (family_id)');
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS notification_deliveries (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      notification_type VARCHAR(64) NOT NULL,
+      reference_key VARCHAR(255) NOT NULL,
+      delivered_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (user_id, notification_type, reference_key)
+    )
+  `);
+  await db.query('CREATE INDEX IF NOT EXISTS idx_notif_deliveries_lookup ON notification_deliveries (user_id, notification_type, reference_key)');
 }
 
 module.exports = { ensurePlacesAuditSchema };

@@ -13,7 +13,9 @@ const placesRoutes = require('./routes/places');
 const searchRoutes = require('./routes/search');
 const accountRoutes = require('./routes/account');
 const adminRoutes = require('./routes/admin');
+const notificationsRoutes = require('./routes/notifications');
 const { ensurePlacesAuditSchema } = require('./database/ensurePlacesAuditSchema');
+const { startScheduler } = require('./lib/notificationScheduler');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -39,6 +41,7 @@ app.use('/api/places', placesRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/account', accountRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/notifications', notificationsRoutes);
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
@@ -57,8 +60,9 @@ app.use((err, req, res, next) => {
   try {
     await ensurePlacesAuditSchema();
     console.log(
-      'Database: places, audit_logs, user_privacy_settings, users profile columns (incl. city/village), and users.is_admin are ready.'
+      'Database: places, audit_logs, user_privacy_settings, users profile columns (incl. city/village), users.is_admin, and push notification tables are ready.'
     );
+    startScheduler();
   } catch (err) {
     console.error('Database schema ensure failed (check PG* / DATABASE_URL):', err.message);
   }

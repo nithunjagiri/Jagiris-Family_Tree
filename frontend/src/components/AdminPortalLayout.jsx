@@ -22,6 +22,9 @@ export default function AdminPortalLayout() {
         <NavLink to="users" className={tabClass}>
           Users
         </NavLink>
+        <NavLink to="announcements" className={tabClass}>
+          Announcements
+        </NavLink>
         <NavLink to="audit" className={tabClass}>
           Audit log
         </NavLink>

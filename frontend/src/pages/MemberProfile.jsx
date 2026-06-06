@@ -1,6 +1,6 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Pencil, User, Users, Mail, Phone, MessageCircle, MapPin, Briefcase, Calendar, Activity } from 'lucide-react';
+import { ArrowLeft, Pencil, User, Users, Mail, Phone, MessageCircle, MapPin, Briefcase, Calendar, Activity, X } from 'lucide-react';
 import { familyMembersApi } from '../services/api';
 import { formatCalendarLong } from '../lib/calendarDate';
 import { HIDE_RELATION_NAMES_IN_UI } from '../lib/appDisplaySettings';
@@ -33,6 +33,16 @@ export default function MemberProfile() {
   const [spouse, setSpouse] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+
+  useEffect(() => {
+    if (!lightboxOpen) return;
+    const handleKey = (e) => {
+      if (e.key === 'Escape') setLightboxOpen(false);
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [lightboxOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -117,7 +127,10 @@ export default function MemberProfile() {
       <div className="rounded-2xl border border-gray-200 bg-white shadow-soft dark:border-gray-800 dark:bg-gray-900 dark:shadow-soft-dark overflow-hidden">
         <div className="border-b border-gray-200 bg-gray-50 p-6 dark:border-gray-700 dark:bg-gray-800/50">
           <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start sm:gap-6">
-            <div className="h-24 w-24 shrink-0 overflow-hidden rounded-full border-2 border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-700">
+            <div
+              onClick={member.profile_photo ? () => setLightboxOpen(true) : undefined}
+              className={`h-24 w-24 shrink-0 overflow-hidden rounded-full border-2 border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-700${member.profile_photo ? ' cursor-pointer ring-offset-2 transition-transform hover:scale-105 active:scale-95' : ''}`}
+            >
               {member.profile_photo ? (
                 <img src={resolveBackendPublicUrl(member.profile_photo)} alt={fullName} className="h-full w-full object-cover" />
               ) : (
@@ -196,6 +209,32 @@ export default function MemberProfile() {
           )}
         </div>
       </div>
+
+      {lightboxOpen && member.profile_photo && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => setLightboxOpen(false)}
+        >
+          <button
+            type="button"
+            onClick={() => setLightboxOpen(false)}
+            className="absolute right-4 top-4 rounded-full bg-black/50 p-2 text-white transition-colors hover:bg-black/70"
+            aria-label="Close"
+          >
+            <X className="h-6 w-6" />
+          </button>
+          <div className="flex flex-col items-center gap-4 px-6" onClick={(e) => e.stopPropagation()}>
+            <div className="h-64 w-64 overflow-hidden rounded-full border-4 border-white/20 shadow-2xl sm:h-80 sm:w-80">
+              <img
+                src={resolveBackendPublicUrl(member.profile_photo)}
+                alt={fullName}
+                className="h-full w-full object-cover"
+              />
+            </div>
+            <p className="text-center text-lg font-medium text-white">{fullName}</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

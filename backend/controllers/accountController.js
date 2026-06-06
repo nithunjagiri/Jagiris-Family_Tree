@@ -100,28 +100,91 @@ exports.changePassword = async (req, res, next) => {
 
 exports.exportData = async (req, res, next) => {
   try {
-    const familyId = req.familyId;
-    const [members, events, photos] = await Promise.all([
-      db.query(
-        'SELECT id, family_id, name, surname, relation, gender, date_of_birth, date_of_death, is_alive, phone, whatsapp_number, email, birth_place, birth_place_id, residence_place_id, residence_place, created_by, updated_by, occupation, notes, education_level, educational_qualification, marital_status, anniversary_date, blood_group, emergency_contact_name, emergency_contact_phone, privacy_level, preferred_language, biography, instagram_id, facebook_id, father_id, mother_id, spouse_id, created_at, updated_at FROM family_members WHERE family_id = $1 ORDER BY id',
-        [familyId]
-      ),
-      db.query('SELECT id, family_id, title, event_date, description FROM events WHERE family_id = $1 ORDER BY event_date', [familyId]),
-      db.query('SELECT id, family_id, title, image_path, uploaded_at FROM photos WHERE family_id = $1 ORDER BY uploaded_at DESC', [familyId]),
-    ]);
+    if (!req.user?.isAdmin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
 
-    const payload = {
-      exportedAt: new Date().toISOString(),
-      user: { id: req.user.id, username: req.user.username },
-      family: { id: familyId, name: req.familyName || null },
-      familyMembers: members.rows,
-      events: events.rows,
-      photos: photos.rows,
+    const familyId = req.familyId;
+    const members = await db.query(
+      `SELECT id, name, surname, relation, gender, date_of_birth, date_of_death, is_alive,
+              phone, whatsapp_number, email, birth_place, residence_place, occupation,
+              education_level, educational_qualification, marital_status, anniversary_date,
+              blood_group, emergency_contact_name, emergency_contact_phone, privacy_level,
+              preferred_language, instagram_id, facebook_id, notes, created_at, updated_at
+       FROM family_members
+       WHERE family_id = $1
+       ORDER BY id`,
+      [familyId]
+    );
+
+    const columns = [
+      ['id', 'ID'],
+      ['name', 'Name'],
+      ['surname', 'Surname'],
+      ['relation', 'Relation'],
+      ['gender', 'Gender'],
+      ['date_of_birth', 'Date of Birth'],
+      ['date_of_death', 'Date of Death'],
+      ['is_alive', 'Is Alive'],
+      ['phone', 'Phone'],
+      ['whatsapp_number', 'WhatsApp Number'],
+      ['email', 'Email'],
+      ['birth_place', 'Birth Place'],
+      ['residence_place', 'Residence Place'],
+      ['occupation', 'Occupation'],
+      ['education_level', 'Education Level'],
+      ['educational_qualification', 'Educational Qualification'],
+      ['marital_status', 'Marital Status'],
+      ['anniversary_date', 'Anniversary Date'],
+      ['blood_group', 'Blood Group'],
+      ['emergency_contact_name', 'Emergency Contact Name'],
+      ['emergency_contact_phone', 'Emergency Contact Phone'],
+      ['privacy_level', 'Privacy Level'],
+      ['preferred_language', 'Preferred Language'],
+      ['instagram_id', 'Instagram ID'],
+      ['facebook_id', 'Facebook ID'],
+      ['notes', 'Notes'],
+      ['created_at', 'Created At'],
+      ['updated_at', 'Updated At'],
+    ];
+
+    const escapeCell = (value) => {
+      if (value === null || value === undefined) return '';
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
     };
 
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="jagiris-family-export-${Date.now()}.json"`);
-    res.send(JSON.stringify(payload, null, 2));
+    const rowsHtml = members.rows
+      .map((row) => (
+        `<tr>${columns.map(([key]) => `<td>${escapeCell(row[key])}</td>`).join('')}</tr>`
+      ))
+      .join('');
+
+    const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    table { border-collapse: collapse; font-family: Arial, sans-serif; font-size: 12px; }
+    th, td { border: 1px solid #999; padding: 6px; mso-number-format: "\\@"; }
+    th { background: #1e40af; color: #fff; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <table>
+    <thead><tr>${columns.map(([, label]) => `<th>${escapeCell(label)}</th>`).join('')}</tr></thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>
+</body>
+</html>`;
+
+    const filename = `jagiris-family-members-${new Date().toISOString().slice(0, 10)}.xls`;
+    res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(Buffer.from(html, 'utf8'));
   } catch (err) {
     next(err);
   }

@@ -151,7 +151,15 @@ export const photosApi = {
 
 export const eventsApi = {
   list: (upcoming) => api.get('/events', { params: upcoming ? { upcoming: 'true' } : {} }),
-  add: (data) => api.post('/events', data),
+  add: (data, imageFile) => {
+    if (!imageFile) return api.post('/events', data);
+    const form = new FormData();
+    Object.entries(data).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') form.append(key, value);
+    });
+    form.append('image', imageFile);
+    return api.post('/events', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
 };
 
 export const familyTreeApi = {
@@ -187,6 +195,19 @@ export const accountApi = {
   exportData: () => api.get('/account/export', { responseType: 'blob' }),
   listFamilies: () => api.get('/account/families'),
   deleteAccount: (data) => api.post('/account/delete-account', data),
+};
+
+export const notificationsApi = {
+  registerToken: (token, platform = 'android') =>
+    api.post('/notifications/token', { token, platform }),
+  unregisterToken: (token) =>
+    api.delete('/notifications/token', { data: { token } }),
+  listAnnouncements: (params) =>
+    api.get('/notifications/announcements', { params }),
+  createAnnouncement: (data) =>
+    api.post('/notifications/announcements', data),
+  deleteAnnouncement: (id) =>
+    api.delete(`/notifications/announcements/${id}`),
 };
 
 export const adminApi = {

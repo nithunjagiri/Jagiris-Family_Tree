@@ -1,4 +1,11 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { notificationsApi } from '../services/api';
+import {
+  isPushSupported,
+  initPushNotifications,
+  getCurrentToken,
+  teardownPushNotifications,
+} from '../lib/pushNotifications';
 
 const AuthContext = createContext(null);
 
@@ -10,6 +17,45 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
+  const pushInitRef = useRef(false);
+
+  const registerPush = useCallback(async () => {
+    if (!isPushSupported() || pushInitRef.current) return;
+    pushInitRef.current = true;
+    try {
+      await initPushNotifications(
+        async (deviceToken) => {
+          try {
+            await notificationsApi.registerToken(deviceToken);
+          } catch (err) {
+            console.error('[push] Failed to send token to backend:', err);
+          }
+        },
+        (notification) => {
+          const data = notification?.data;
+          if (data?.type === 'event') {
+            window.location.href = '/events';
+          } else if (data?.type === 'announcement') {
+            window.location.href = '/admin/announcements';
+          }
+        }
+      );
+    } catch (err) {
+      console.error('[push] init error:', err);
+    }
+  }, []);
+
+  const unregisterPush = useCallback(async () => {
+    if (!isPushSupported()) return;
+    const deviceToken = getCurrentToken();
+    if (deviceToken) {
+      try {
+        await notificationsApi.unregisterToken(deviceToken);
+      } catch (_) {}
+    }
+    await teardownPushNotifications();
+    pushInitRef.current = false;
+  }, []);
 
   useEffect(() => {
     const t = localStorage.getItem(TOKEN_KEY);
@@ -26,6 +72,13 @@ export function AuthProvider({ children }) {
     setLoading(false);
   }, []);
 
+  // Register for push when authenticated
+  useEffect(() => {
+    if (token && user) {
+      registerPush();
+    }
+  }, [token, user, registerPush]);
+
   const login = (newToken, newUser) => {
     setToken(newToken);
     setUser(newUser);
@@ -33,7 +86,8 @@ export function AuthProvider({ children }) {
     localStorage.setItem(USER_KEY, JSON.stringify(newUser));
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await unregisterPush();
     setToken(null);
     setUser(null);
     localStorage.removeItem(TOKEN_KEY);

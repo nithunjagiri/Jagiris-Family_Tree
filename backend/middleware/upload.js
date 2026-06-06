@@ -47,7 +47,12 @@ const galleryStorage = useCloudinary
   ? makeCloudinaryStorage('gallery')
   : makeLocalStorage('gallery');
 
+const eventStorage = useCloudinary
+  ? makeCloudinaryStorage('events')
+  : makeLocalStorage('events');
+
 const uploadSingle = multer({ storage: profileStorage, fileFilter, limits: { fileSize: MAX_SIZE } });
 const uploadGallery = multer({ storage: galleryStorage, fileFilter, limits: { fileSize: MAX_SIZE } });
+const uploadEvent = multer({ storage: eventStorage, fileFilter, limits: { fileSize: MAX_SIZE } });
 
-module.exports = { uploadSingle, uploadGallery, useCloudinary };
+module.exports = { uploadSingle, uploadGallery, uploadEvent, useCloudinary };
