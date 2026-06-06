@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { Capacitor } from '@capacitor/core';
 import { useAuth } from './context/AuthContext';
 import { App as CapApp } from '@capacitor/app';
 import Layout from './components/Layout';
@@ -64,6 +65,8 @@ function useAndroidBackButton() {
   const location = useLocation();
 
   useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
     const listener = CapApp.addListener('backButton', ({ canGoBack }) => {
       if (document.fullscreenElement) {
         document.exitFullscreen().catch(() => {});

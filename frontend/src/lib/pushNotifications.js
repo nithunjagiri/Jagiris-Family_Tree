@@ -5,10 +5,18 @@ let registered = false;
 let currentToken = null;
 
 /**
+ * Push is opt-in until Firebase is configured (google-services.json + backend FCM env).
+ * Without this, PushNotifications.register() crashes Android natively.
+ */
+export function isPushEnabled() {
+  return import.meta.env.VITE_ENABLE_PUSH === 'true';
+}
+
+/**
  * Returns true when running on a native platform that supports push.
  */
 export function isPushSupported() {
-  return Capacitor.isNativePlatform();
+  return Capacitor.isNativePlatform() && isPushEnabled();
 }
 
 /**
@@ -29,6 +37,17 @@ export async function initPushNotifications(onTokenReceived, onNotificationTappe
   if (permStatus.receive !== 'granted') {
     console.warn('[push] Permission not granted');
     return;
+  }
+
+  if (Capacitor.getPlatform() === 'android') {
+    await PushNotifications.createChannel({
+      id: 'jagiris_notifications',
+      name: 'Jagiris Notifications',
+      description: 'Family announcements, birthdays, anniversaries, and events',
+      importance: 5,
+      visibility: 1,
+      sound: 'default',
+    });
   }
 
   PushNotifications.addListener('registration', async (token) => {

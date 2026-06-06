@@ -5,6 +5,7 @@ import { accountApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../lib/utils';
 import { getApiErrorMessage } from '../lib/apiErrorMessage';
+import { downloadBlobFile, filenameFromContentDisposition } from '../lib/downloadFile';
 import { resolveBackendPublicUrl } from '../lib/backendOrigin';
 import { compressImageFile, formatFileSize, IMAGE_ACCEPTED_TYPES, ONE_MB } from '../lib/imageProcessing';
 import ImageCropModal from '../components/ImageCropModal';
@@ -261,18 +262,15 @@ export default function AccountPrivacy() {
     setExporting(true);
     try {
       const res = await accountApi.exportData();
-      const blob = new Blob([res.data], { type: 'application/vnd.ms-excel;charset=utf-8' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.style.display = 'none';
-      a.href = url;
-      a.download = `jagiris-family-members-${new Date().toISOString().slice(0, 10)}.xls`;
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-      }, 200);
+      const fallback = `jagiris-family-members-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      const filename = filenameFromContentDisposition(res.headers['content-disposition'], fallback);
+      const blob = new Blob([res.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const result = await downloadBlobFile(blob, filename);
+      if (result?.savedTo) {
+        alert(`Download complete.\n\nSaved to ${result.savedTo}:\n${filename}`);
+      }
     } catch (err) {
       alert(getApiErrorMessage(err, 'Export failed.'));
     } finally {
@@ -688,8 +686,8 @@ export default function AccountPrivacy() {
             Family members export
           </h2>
           <p className="mb-4 max-w-3xl text-sm leading-6 text-gray-600 dark:text-gray-400">
-            Download an Excel file with family member records only. Events, gallery metadata, and photo files are not
-            included in this export.
+            Download an Excel file (.xlsx) with family member records only. On mobile, the file is saved to your
+            Downloads folder. Events, gallery metadata, and photo files are not included in this export.
           </p>
           <button
             type="button"

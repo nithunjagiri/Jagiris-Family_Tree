@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../database/db');
+const XLSX = require('xlsx');
 const { body, validationResult } = require('express-validator');
 const { logAudit } = require('../lib/auditLog');
 const { ensurePlacesAuditSchema } = require('../database/ensurePlacesAuditSchema');
@@ -148,43 +149,26 @@ exports.exportData = async (req, res, next) => {
       ['updated_at', 'Updated At'],
     ];
 
-    const escapeCell = (value) => {
-      if (value === null || value === undefined) return '';
-      return String(value)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-    };
+    const sheetRows = [
+      columns.map(([, label]) => label),
+      ...members.rows.map((row) => columns.map(([key]) => {
+        const value = row[key];
+        return value === null || value === undefined ? '' : value;
+      })),
+    ];
 
-    const rowsHtml = members.rows
-      .map((row) => (
-        `<tr>${columns.map(([key]) => `<td>${escapeCell(row[key])}</td>`).join('')}</tr>`
-      ))
-      .join('');
+    const worksheet = XLSX.utils.aoa_to_sheet(sheetRows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Family Members');
 
-    const html = `<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <style>
-    table { border-collapse: collapse; font-family: Arial, sans-serif; font-size: 12px; }
-    th, td { border: 1px solid #999; padding: 6px; mso-number-format: "\\@"; }
-    th { background: #1e40af; color: #fff; font-weight: bold; }
-  </style>
-</head>
-<body>
-  <table>
-    <thead><tr>${columns.map(([, label]) => `<th>${escapeCell(label)}</th>`).join('')}</tr></thead>
-    <tbody>${rowsHtml}</tbody>
-  </table>
-</body>
-</html>`;
-
-    const filename = `jagiris-family-members-${new Date().toISOString().slice(0, 10)}.xls`;
-    res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    const filename = `jagiris-family-members-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.send(Buffer.from(html, 'utf8'));
+    res.send(buffer);
   } catch (err) {
     next(err);
   }
