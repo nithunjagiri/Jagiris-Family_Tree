@@ -6,6 +6,10 @@ Family Memory Management Web Application — React + Vite frontend, Node.js + Ex
 
 - Node.js 18+
 - PostgreSQL (local) with a database named **my-family**
+
+### Windows: “connection timeout” to localhost
+
+If **pgAdmin** or the app cannot reach `localhost:5432`, the **PostgreSQL 18** service may be stopped. In **Services** (`services.msc`), start **postgresql-x64-18**. If you have more than one major version installed, the older one often uses another port (for example **5433**); this app’s `.env` defaults assume the database on **5432** unless you change `PGPORT` or `DATABASE_URL`.
 - Existing tables: `family_members`, `events`, `photos` (see plan for column details)
 
 ## Database setup
@@ -26,6 +30,14 @@ Family Memory Management Web Application — React + Vite frontend, Node.js + Ex
      created_at TIMESTAMP DEFAULT NOW()
    );
    ```
+
+3. Add the **`is_alive`** column (`VARCHAR(3)`, values **`Yes`** / **`No`**) for the living/deceased field on the add/edit member form:
+
+   ```bash
+   psql -U postgres -d my-family -f backend/database/add-is-alive-column.sql
+   ```
+
+   Use your database name if it is not `my-family`.
 
 ## Installation
 

@@ -13,3 +13,50 @@
     transform: rotate(360deg);
   }
 }
+
+/* react-d3-tree: override link color and kill all transitions for smooth panning */
+html .rd3t-tree-container .rd3t-link {
+  fill: none;
+  stroke: rgb(100, 116, 139);
+  stroke-width: 2.5px;
+  stroke-linecap: round;
+}
+
+html.dark .rd3t-tree-container .rd3t-link {
+  stroke: rgb(203, 213, 225);
+}
+
+html .rd3t-tree-container g.rd3t-node,
+html .rd3t-tree-container g.rd3t-leaf-node,
+html .rd3t-tree-container .rd3t-link {
+  transition: none !important;
+}
+
+html .rd3t-tree-container svg {
+  touch-action: none;
+}
+
+@layer components {
+  .family-tree-viewport {
+    @apply relative overflow-hidden rounded-xl border border-gray-200/90 bg-slate-50 shadow-sm dark:border-gray-800 dark:bg-gray-950;
+    background-image: radial-gradient(
+      circle at 1px 1px,
+      rgb(148 163 184 / 0.22) 1px,
+      transparent 0
+    );
+    background-size: 22px 22px;
+  }
+
+  html.dark .family-tree-viewport {
+    background-image: radial-gradient(
+      circle at 1px 1px,
+      rgb(148 163 184 / 0.12) 1px,
+      transparent 0
+    );
+  }
+
+  .leaflet-map-wrap {
+    isolation: isolate;
+    z-index: 0;
+  }
+}

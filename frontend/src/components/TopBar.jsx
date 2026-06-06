@@ -1,15 +1,35 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Menu, LogOut, User, Moon, Sun } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Menu, LogOut, User, Moon, Sun, Shield, Settings, Mail } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { cn } from '../lib/utils';
+import { accountApi, setActiveFamilyId, resolveJagirisFamilyId } from '../services/api';
 
 export default function TopBar({ onMenuClick }) {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [profileOpen, setProfileOpen] = useState(false);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    accountApi
+      .listFamilies()
+      .then((res) => {
+        if (cancelled) return;
+        const rows = Array.isArray(res.data?.families) ? res.data.families : [];
+        const nextId = resolveJagirisFamilyId(rows);
+        if (nextId) setActiveFamilyId(nextId);
+      })
+      .catch(() => {
+        if (cancelled) return;
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   const handleLogout = () => {
     logout();
@@ -28,7 +48,7 @@ export default function TopBar({ onMenuClick }) {
         <Menu className="h-6 w-6" />
       </button>
       <h1 className="text-lg font-semibold text-gray-900 dark:text-white md:text-xl">
-        Jagiri's Family Memory
+        Jagiri's Kutumbam
       </h1>
       <div className="ml-auto flex items-center gap-2">
         <button
@@ -58,6 +78,32 @@ export default function TopBar({ onMenuClick }) {
                   <p className="text-sm font-medium">{user?.username}</p>
                   <p className="truncate text-xs text-gray-500 dark:text-gray-400">{user?.email}</p>
                 </div>
+                <Link
+                  to="/account"
+                  onClick={() => setProfileOpen(false)}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700"
+                >
+                  <Settings className="h-4 w-4" />
+                  Account &amp; privacy
+                </Link>
+                <Link
+                  to="/contact"
+                  onClick={() => setProfileOpen(false)}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700"
+                >
+                  <Mail className="h-4 w-4" />
+                  Contact us
+                </Link>
+                {isAdmin && (
+                  <Link
+                    to="/admin/users"
+                    onClick={() => setProfileOpen(false)}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700"
+                  >
+                    <Shield className="h-4 w-4" />
+                    Admin portal
+                  </Link>
+                )}
                 <button
                   type="button"
                   onClick={handleLogout}
