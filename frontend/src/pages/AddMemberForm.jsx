@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { familyMembersApi, placesApi } from '../services/api';
@@ -15,6 +15,19 @@ import { buildMemberLinkOptions } from '../lib/memberSelectOptions';
 import SearchableSelect from '../components/SearchableSelect';
 import { HIDE_RELATION_NAMES_IN_UI } from '../lib/appDisplaySettings';
 import { getApiErrorMessage } from '../lib/apiErrorMessage';
+import {
+  compressImageFile,
+  formatFileSize,
+  IMAGE_ACCEPTED_TYPES,
+  ONE_MB,
+} from '../lib/imageProcessing';
+import ImageCropModal from '../components/ImageCropModal';
+import { resolveBackendPublicUrl } from '../lib/backendOrigin';
+
+const PROFILE_MAX_SIZE_BYTES = 5 * 1024 * 1024;
+const PROFILE_MAX_SIZE_LABEL = '5 MB';
+const PROFILE_TARGET_SIZE_BYTES = ONE_MB;
+const PROFILE_TARGET_SIZE_LABEL = '1 MB';
 
 const inputClass =
   'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-gray-600 dark:bg-gray-800 dark:text-white';
@@ -101,6 +114,11 @@ export default function AddMemberForm() {
   const [mother_id, setMotherId] = useState('');
   const [spouse_id, setSpouseId] = useState('');
   const [profileFile, setProfileFile] = useState(null);
+  const [profilePreview, setProfilePreview] = useState(null);
+  const [existingProfilePhoto, setExistingProfilePhoto] = useState(null);
+  const [profileProcessing, setProfileProcessing] = useState(false);
+  const [profileCropOpen, setProfileCropOpen] = useState(false);
+  const profileInputRef = useRef(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(isEdit);
@@ -167,6 +185,7 @@ export default function AddMemberForm() {
         setFatherId(m.father_id ? String(m.father_id) : '');
         setMotherId(m.mother_id ? String(m.mother_id) : '');
         setSpouseId(m.spouse_id ? String(m.spouse_id) : '');
+        setExistingProfilePhoto(m.profile_photo || null);
       })
       .catch(() => setError('Failed to load member'))
       .finally(() => setFetching(false));
@@ -315,6 +334,10 @@ export default function AddMemberForm() {
   const runSaveAfterDuplicateCheck = useCallback(
     async (skipDuplicateCheck) => {
       setError('');
+      if (profileFile?.size > PROFILE_MAX_SIZE_BYTES) {
+        setError('Please compress or crop the profile photo before saving.');
+        return;
+      }
       /* Duplicate warning is only for new members; edits save without this step. */
       if (!skipDuplicateCheck && !isEdit) {
         const { matches, dobDiffersFromForm } = findDuplicateMembers(
@@ -339,8 +362,64 @@ export default function AddMemberForm() {
         setLoading(false);
       }
     },
-    [members, name, surname, gender, date_of_birth, isEdit, saveMember]
+    [members, name, surname, gender, date_of_birth, isEdit, saveMember, profileFile]
   );
+
+  const handleProfileSelect = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!IMAGE_ACCEPTED_TYPES.includes(file.type)) {
+      setError('Only JPEG, PNG, GIF, or WebP images are allowed for profile photo.');
+      return;
+    }
+    setError(
+      file.size > PROFILE_MAX_SIZE_BYTES
+        ? `Profile photo is ${formatFileSize(file.size)}. Compress or crop it before saving.`
+        : ''
+    );
+    if (profilePreview) URL.revokeObjectURL(profilePreview);
+    setProfileFile(file);
+    setProfilePreview(URL.createObjectURL(file));
+  };
+
+  const processProfilePhoto = async (cropSquare = false) => {
+    if (!profileFile) return;
+    setProfileProcessing(true);
+    setError('');
+    try {
+      const processed = await compressImageFile(profileFile, {
+        targetBytes: PROFILE_TARGET_SIZE_BYTES,
+        cropSquare,
+        maxWidth: 1200,
+        maxHeight: 1200,
+      });
+      setProfileFile(processed);
+      if (profilePreview) URL.revokeObjectURL(profilePreview);
+      setProfilePreview(URL.createObjectURL(processed));
+      if (processed.size > PROFILE_MAX_SIZE_BYTES) {
+        setError(`${processed.name} is still larger than ${PROFILE_MAX_SIZE_LABEL}. Try crop + compress.`);
+      }
+    } catch (err) {
+      setError(err.message || 'Could not process profile photo.');
+    } finally {
+      setProfileProcessing(false);
+    }
+  };
+
+  const applyCroppedProfilePhoto = (cropped) => {
+    setProfileFile(cropped);
+    if (profilePreview) URL.revokeObjectURL(profilePreview);
+    setProfilePreview(URL.createObjectURL(cropped));
+    setProfileCropOpen(false);
+    setError('');
+  };
+
+  const clearProfilePhoto = () => {
+    if (profilePreview) URL.revokeObjectURL(profilePreview);
+    setProfileFile(null);
+    setProfilePreview(null);
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -682,22 +761,96 @@ export default function AddMemberForm() {
           <div>
             <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Profile photo</label>
             <input
+              ref={profileInputRef}
               type="file"
-              accept="image/*"
-              onChange={(e) => setProfileFile(e.target.files?.[0] || null)}
-              className="block w-full text-sm text-gray-500 file:mr-4 file:rounded-lg file:border-0 file:bg-primary-50 file:px-4 file:py-2 file:text-primary-700 dark:file:bg-primary-900/30 dark:file:text-primary-300"
+              accept="image/jpeg,image/png,image/gif,image/webp"
+              className="hidden"
+              onChange={handleProfileSelect}
             />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+              <div className="h-24 w-24 shrink-0 overflow-hidden rounded-full border-2 border-gray-200 bg-gray-100 dark:border-gray-600 dark:bg-gray-800">
+                {profilePreview ? (
+                  <img src={profilePreview} alt="" className="h-full w-full object-cover" />
+                ) : existingProfilePhoto ? (
+                  <img
+                    src={resolveBackendPublicUrl(existingProfilePhoto)}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-xs text-gray-400">No photo</div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1 space-y-2">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  JPEG, PNG, GIF, or WebP. Max {PROFILE_MAX_SIZE_LABEL}. Use crop to center the face in the circle.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => profileInputRef.current?.click()}
+                    className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium dark:border-gray-600"
+                  >
+                    Choose photo
+                  </button>
+                  {profileFile && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => processProfilePhoto(false)}
+                        disabled={profileProcessing}
+                        className="rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+                      >
+                        {profileProcessing ? 'Processing...' : `Compress to ${PROFILE_TARGET_SIZE_LABEL}`}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setProfileCropOpen(true)}
+                        disabled={profileProcessing}
+                        className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium dark:border-gray-600"
+                      >
+                        Crop &amp; adjust
+                      </button>
+                      <button
+                        type="button"
+                        onClick={clearProfilePhoto}
+                        className="rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 dark:border-red-900/50 dark:text-red-400"
+                      >
+                        Clear
+                      </button>
+                    </>
+                  )}
+                </div>
+                {profileFile && (
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                    Selected: {formatFileSize(profileFile.size)}
+                    {profileFile.size > PROFILE_MAX_SIZE_BYTES ? (
+                      <span className="ml-1 text-amber-700 dark:text-amber-300">(over {PROFILE_MAX_SIZE_LABEL})</span>
+                    ) : null}
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
           {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || profileProcessing}
             className="w-full rounded-lg bg-primary-600 py-2.5 font-medium text-white transition-colors hover:bg-primary-700 disabled:opacity-50 sm:w-auto sm:px-8"
           >
-            {loading ? 'Saving...' : isEdit ? 'Update' : 'Add Member'}
+            {loading ? 'Saving...' : profileProcessing ? 'Processing photo...' : isEdit ? 'Update' : 'Add Member'}
           </button>
         </form>
       </div>
+
+      <ImageCropModal
+        open={profileCropOpen}
+        file={profileFile}
+        title="Crop profile photo"
+        targetBytes={PROFILE_TARGET_SIZE_BYTES}
+        onClose={() => setProfileCropOpen(false)}
+        onApply={applyCroppedProfilePhoto}
+      />
 
       <DuplicateMemberModal
         open={dupModalOpen}

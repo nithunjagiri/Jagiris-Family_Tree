@@ -311,11 +311,15 @@ async function ensurePlacesAuditSchema() {
       created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
       title VARCHAR(500) NOT NULL,
       body TEXT,
+      target_audience VARCHAR(16) NOT NULL DEFAULT 'all',
       sent_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
   await db.query('CREATE INDEX IF NOT EXISTS idx_announcements_family_id ON announcements (family_id)');
+  await db.query(
+    "ALTER TABLE announcements ADD COLUMN IF NOT EXISTS target_audience VARCHAR(16) NOT NULL DEFAULT 'all'"
+  );
 
   await db.query(`
     CREATE TABLE IF NOT EXISTS notification_deliveries (
@@ -328,6 +332,44 @@ async function ensurePlacesAuditSchema() {
     )
   `);
   await db.query('CREATE INDEX IF NOT EXISTS idx_notif_deliveries_lookup ON notification_deliveries (user_id, notification_type, reference_key)');
+
+  // ── Gallery album batches ──
+
+  await db.query('ALTER TABLE photos ADD COLUMN IF NOT EXISTS upload_batch_id UUID');
+  await db.query(
+    'CREATE INDEX IF NOT EXISTS idx_photos_upload_batch_id ON photos (upload_batch_id)'
+  );
+
+  // ── In-app notification feed (header bell) ──
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS user_notifications (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      family_id INTEGER NOT NULL REFERENCES families(id) ON DELETE CASCADE,
+      type VARCHAR(32) NOT NULL,
+      title VARCHAR(500) NOT NULL,
+      body TEXT,
+      entity_type VARCHAR(64),
+      entity_id INTEGER,
+      link_path VARCHAR(255),
+      actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      reference_key VARCHAR(255),
+      read_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await db.query(
+    'CREATE INDEX IF NOT EXISTS idx_user_notifications_user_unread ON user_notifications (user_id, read_at, created_at DESC)'
+  );
+  await db.query(
+    'CREATE INDEX IF NOT EXISTS idx_user_notifications_family ON user_notifications (family_id, created_at DESC)'
+  );
+  await db.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_user_notifications_dedup
+    ON user_notifications (user_id, type, reference_key)
+    WHERE reference_key IS NOT NULL
+  `);
 }
 
 module.exports = { ensurePlacesAuditSchema };

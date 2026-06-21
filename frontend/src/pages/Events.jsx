@@ -12,6 +12,8 @@ import {
   ONE_MB,
 } from '../lib/imageProcessing';
 import ImageCropModal from '../components/ImageCropModal';
+import EventDetailModal from '../components/EventDetailModal';
+import PhotoLightbox from '../components/PhotoLightbox';
 
 const EVENT_MAX_SIZE_BYTES = 2 * 1024 * 1024;
 const EVENT_MAX_SIZE_LABEL = '2 MB';
@@ -32,6 +34,8 @@ export default function Events() {
   const [cropOpen, setCropOpen] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [eventImageLightbox, setEventImageLightbox] = useState(null);
   const imageInputRef = useRef(null);
 
   const load = () => {
@@ -320,7 +324,16 @@ export default function Events() {
               return (
               <li
                 key={ev.id}
-                className="flex gap-4 p-4 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                role="button"
+                tabIndex={0}
+                onClick={() => setSelectedEvent(ev)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setSelectedEvent(ev);
+                  }
+                }}
+                className="flex cursor-pointer gap-4 p-4 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50"
               >
                 <div className="flex shrink-0 flex-col items-center justify-center rounded-xl bg-primary-100 px-3 py-2 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">
                   <span className="text-xs font-medium uppercase">
@@ -336,15 +349,16 @@ export default function Events() {
                 <div className="min-w-0 flex-1">
                   <h3 className="font-semibold text-gray-900 dark:text-white">{ev.title}</h3>
                   {ev.description && (
-                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{ev.description}</p>
+                    <p className="mt-1 line-clamp-2 text-sm text-gray-600 dark:text-gray-300">{ev.description}</p>
                   )}
                   {ev.image_path && (
                     <img
                       src={resolveBackendPublicUrl(ev.image_path)}
                       alt=""
-                      className="mt-3 max-h-56 w-full rounded-xl object-cover sm:max-w-md"
+                      className="mt-3 max-h-32 w-full rounded-xl object-cover sm:max-w-xs"
                     />
                   )}
+                  <p className="mt-2 text-xs text-primary-600 dark:text-primary-400">Tap for full details</p>
                 </div>
               </li>
               );
@@ -352,6 +366,31 @@ export default function Events() {
           </ul>
         )}
       </div>
+
+      <EventDetailModal
+        event={selectedEvent}
+        onClose={() => setSelectedEvent(null)}
+        onImageClick={(ev) =>
+          setEventImageLightbox([
+            {
+              id: ev.id,
+              title: ev.title,
+              image_path: ev.image_path,
+              uploaded_at: ev.event_date,
+            },
+          ])
+        }
+      />
+
+      {eventImageLightbox && (
+        <PhotoLightbox
+          photos={eventImageLightbox}
+          index={0}
+          onClose={() => setEventImageLightbox(null)}
+          onIndexChange={() => {}}
+          showThumbnails={false}
+        />
+      )}
     </div>
   );
 }

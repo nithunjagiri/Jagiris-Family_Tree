@@ -6,6 +6,7 @@ import {
   getCurrentToken,
   teardownPushNotifications,
 } from '../lib/pushNotifications';
+import { navigateFromPushNotification } from '../lib/pushNavigation';
 
 const AuthContext = createContext(null);
 
@@ -32,12 +33,7 @@ export function AuthProvider({ children }) {
           }
         },
         (notification) => {
-          const data = notification?.data;
-          if (data?.type === 'event') {
-            window.location.href = '/events';
-          } else if (data?.type === 'announcement') {
-            window.location.href = '/admin/announcements';
-          }
+          navigateFromPushNotification(notification);
         }
       );
     } catch (err) {

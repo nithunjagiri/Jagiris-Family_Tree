@@ -9,6 +9,11 @@ const router = express.Router();
 router.post('/token', auth, ctrl.registerToken);
 router.delete('/token', auth, ctrl.unregisterToken);
 
+// In-app feed (header bell)
+router.get('/feed', auth, resolveFamilyContext, ctrl.listFeed);
+router.patch('/feed/read-all', auth, resolveFamilyContext, ctrl.markAllFeedRead);
+router.patch('/feed/:id/read', auth, resolveFamilyContext, ctrl.markFeedRead);
+
 // Announcements (require family context)
 router.get('/announcements', auth, resolveFamilyContext, ctrl.listAnnouncements);
 router.post(

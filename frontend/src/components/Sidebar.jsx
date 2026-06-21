@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, Image, Calendar, GitBranch, MapPin, Search, Settings, Shield, Mail } from 'lucide-react';
+import { LayoutDashboard, Users, Image, Calendar, GitBranch, MapPin, Search, Settings, Shield, Mail, Megaphone } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
 
@@ -8,6 +8,7 @@ const baseNav = [
   { to: '/family-members', label: 'Family Members', icon: Users },
   { to: '/gallery', label: 'Photo Gallery', icon: Image },
   { to: '/events', label: 'Events', icon: Calendar },
+  { to: '/announcements', label: 'Announcements', icon: Megaphone },
   { to: '/family-tree', label: 'Family Tree', icon: GitBranch },
   { to: '/places', label: 'Places & map', icon: MapPin },
   { to: '/search', label: 'Search', icon: Search },

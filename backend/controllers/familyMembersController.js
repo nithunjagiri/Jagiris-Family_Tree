@@ -1,6 +1,7 @@
 const db = require('../database/db');
 const { body, validationResult } = require('express-validator');
 const { logAudit } = require('../lib/auditLog');
+const { scheduleInAppNotification } = require('../lib/inAppNotifications');
 const { useCloudinary } = require('../middleware/upload');
 
 const COLS =
@@ -224,6 +225,21 @@ exports.create = async (req, res, next) => {
       entityId: memberId,
       summary: `${name} ${surname || ''}`.trim(),
     });
+    const displayName = `${name} ${surname || ''}`.trim();
+    const deceasedOnCreate = is_alive === 'No';
+    scheduleInAppNotification({
+      familyId,
+      excludeUserId: req.user?.id,
+      type: 'member_added',
+      title: `New member: ${displayName}`,
+      body: deceasedOnCreate
+        ? `${displayName} was added to the family tree (recorded as deceased).`
+        : `${displayName} was added to the family tree.`,
+      entityType: 'family_member',
+      entityId: memberId,
+      linkPath: `/family-members/${memberId}`,
+      actorUserId: req.user?.id,
+    });
     res.status(201).json(row);
   } catch (err) {
     try {
@@ -244,7 +260,7 @@ exports.update = async (req, res, next) => {
     await client.query('BEGIN');
     const familyId = req.familyId;
     const existing = await client.query(
-      'SELECT profile_photo, spouse_id FROM family_members WHERE id = $1 AND family_id = $2 FOR UPDATE',
+      'SELECT profile_photo, spouse_id, is_alive, name, surname FROM family_members WHERE id = $1 AND family_id = $2 FOR UPDATE',
       [req.params.id, familyId]
     );
     if (!existing.rows[0]) {
@@ -255,6 +271,9 @@ exports.update = async (req, res, next) => {
       ? (useCloudinary ? req.file.path : `/uploads/profiles/${req.file.filename}`)
       : existing.rows[0].profile_photo;
     const prevSpouse = toNum(existing.rows[0].spouse_id);
+    const prevIsAlive = existing.rows[0].is_alive;
+    const prevName = existing.rows[0].name;
+    const prevSurname = existing.rows[0].surname;
 
     const {
       name, surname, relation, date_of_birth, phone, whatsapp_number, gender, email, birth_place,
@@ -308,6 +327,23 @@ exports.update = async (req, res, next) => {
       entityId: Number(req.params.id),
       summary: `${name} ${surname || ''}`.trim(),
     });
+    const memberId = Number(req.params.id);
+    const wasLiving = prevIsAlive !== 'No';
+    const nowDeceased = is_alive === 'No';
+    if (wasLiving && nowDeceased) {
+      const displayName = `${name || prevName} ${surname || prevSurname || ''}`.trim();
+      scheduleInAppNotification({
+        familyId,
+        excludeUserId: req.user?.id,
+        type: 'member_deceased',
+        title: `${displayName} has passed away`,
+        body: `${displayName} was marked as deceased in the family tree.`,
+        entityType: 'family_member',
+        entityId: memberId,
+        linkPath: `/family-members/${memberId}`,
+        actorUserId: req.user?.id,
+      });
+    }
     const row = await selectMemberById(db, req.params.id, familyId);
     res.json(row);
   } catch (err) {

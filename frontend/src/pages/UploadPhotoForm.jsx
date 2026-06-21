@@ -15,8 +15,8 @@ import ImageCropModal from '../components/ImageCropModal';
 const MAX_FILES = 5;
 const MAX_SIZE_BYTES = 5 * 1024 * 1024;
 const MAX_SIZE_LABEL = '5 MB';
-const TARGET_SIZE_BYTES = ONE_MB;
-const TARGET_SIZE_LABEL = '1 MB';
+const TARGET_SIZE_BYTES = 2 * ONE_MB;
+const TARGET_SIZE_LABEL = '2 MB';
 
 const inputClass =
   'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-gray-600 dark:bg-gray-800 dark:text-white';

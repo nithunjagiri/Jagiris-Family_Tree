@@ -1,5 +1,8 @@
 const db = require('../database/db');
 const { logAudit } = require('../lib/auditLog');
+const { scheduleInAppNotification } = require('../lib/inAppNotifications');
+const { sendToUsers } = require('../lib/fcmSender');
+const { getFamilyRecipientUserIds } = require('../lib/notificationRecipients');
 const { body, validationResult } = require('express-validator');
 const { useCloudinary } = require('../middleware/upload');
 
@@ -68,6 +71,37 @@ exports.add = async (req, res, next) => {
       entityId: row.id,
       summary: title,
     });
+    scheduleInAppNotification({
+      familyId: req.familyId,
+      excludeUserId: req.user?.id,
+      type: 'event_added',
+      title: `New event: ${title}`,
+      body: description || `A new family event was added for ${event_date}.`,
+      entityType: 'event',
+      entityId: row.id,
+      linkPath: '/events',
+      actorUserId: req.user?.id,
+    });
+
+    setImmediate(async () => {
+      try {
+        const userIds = await getFamilyRecipientUserIds(req.familyId, {
+          excludeUserId: req.user?.id,
+        });
+        if (userIds.length === 0) return;
+        const refKey = `event_added-${row.id}`;
+        const pushTitle = `New event: ${title}`;
+        const pushBody = description || `A new family event was added for ${event_date}.`;
+        await sendToUsers(userIds, 'event_added', refKey, pushTitle, pushBody, {
+          type: 'event_added',
+          eventId: String(row.id),
+          linkPath: '/events',
+        });
+      } catch (err) {
+        console.error('[events] push send error:', err.message);
+      }
+    });
+
     res.status(201).json(row);
   } catch (err) {
     next(err);

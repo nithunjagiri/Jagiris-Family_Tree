@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import { Menu, LogOut, User, Moon, Sun, Shield, Settings, Mail } from 'lucide-react';
+import NotificationBell from './NotificationBell';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { accountApi, setActiveFamilyId, resolveJagirisFamilyId } from '../services/api';
@@ -51,6 +52,7 @@ export default function TopBar({ onMenuClick }) {
         Jagiri's Kutumbam
       </h1>
       <div className="ml-auto flex items-center gap-2">
+        <NotificationBell />
         <button
           type="button"
           onClick={toggleTheme}

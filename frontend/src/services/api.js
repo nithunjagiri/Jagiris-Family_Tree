@@ -208,6 +208,9 @@ export const notificationsApi = {
     api.post('/notifications/announcements', data),
   deleteAnnouncement: (id) =>
     api.delete(`/notifications/announcements/${id}`),
+  listFeed: (params) => api.get('/notifications/feed', { params }),
+  markFeedRead: (id) => api.patch(`/notifications/feed/${id}/read`),
+  markAllFeedRead: () => api.patch('/notifications/feed/read-all'),
 };
 
 export const adminApi = {

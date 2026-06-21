@@ -1,6 +1,8 @@
 const db = require('../database/db');
 const { logAudit } = require('../lib/auditLog');
 const { sendToUsers } = require('../lib/fcmSender');
+const { scheduleInAppNotification } = require('../lib/inAppNotifications');
+const { getFamilyRecipientUserIds } = require('../lib/notificationRecipients');
 const { body, validationResult } = require('express-validator');
 
 // ── Push token management ──
@@ -44,6 +46,10 @@ exports.unregisterToken = async (req, res, next) => {
 exports.validateAnnouncement = [
   body('title').trim().notEmpty().withMessage('Title is required'),
   body('body').optional().trim(),
+  body('target_audience')
+    .optional()
+    .isIn(['all', 'admins'])
+    .withMessage('target_audience must be all or admins'),
 ];
 
 exports.createAnnouncement = async (req, res, next) => {
@@ -51,14 +57,15 @@ exports.createAnnouncement = async (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-    const { title, body: announcementBody } = req.body;
+    const { title, body: announcementBody, target_audience: targetAudienceRaw } = req.body;
+    const targetAudience = targetAudienceRaw === 'admins' ? 'admins' : 'all';
     const familyId = req.familyId;
 
     const result = await db.query(
-      `INSERT INTO announcements (family_id, created_by, title, body)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO announcements (family_id, created_by, title, body, target_audience)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [familyId, req.user.id, title, announcementBody || null]
+      [familyId, req.user.id, title, announcementBody || null, targetAudience]
     );
     const announcement = result.rows[0];
 
@@ -71,23 +78,20 @@ exports.createAnnouncement = async (req, res, next) => {
       summary: title,
     });
 
-    // Send push to all family members asynchronously (don't block response)
+    // Send push asynchronously (don't block response)
     setImmediate(async () => {
       try {
-        const members = await db.query(
-          `SELECT user_id FROM family_memberships WHERE family_id = $1`,
-          [familyId]
-        );
-        const userIds = members.rows.map((r) => r.user_id);
+        const userIds = await getFamilyRecipientUserIds(familyId, { targetAudience });
         if (userIds.length > 0) {
           const refKey = `announcement-${announcement.id}`;
+          const linkPath = '/announcements';
           await sendToUsers(
             userIds,
             'announcement',
             refKey,
             title,
             announcementBody || 'New announcement from your family',
-            { type: 'announcement', announcementId: String(announcement.id) }
+            { type: 'announcement', announcementId: String(announcement.id), linkPath }
           );
           await db.query(
             `UPDATE announcements SET sent_at = NOW() WHERE id = $1`,
@@ -97,6 +101,20 @@ exports.createAnnouncement = async (req, res, next) => {
       } catch (err) {
         console.error('[announcements] push send error:', err.message);
       }
+    });
+
+    scheduleInAppNotification({
+      familyId,
+      excludeUserId: req.user.id,
+      targetAudience,
+      type: 'announcement',
+      title: `Announcement: ${title}`,
+      body: announcementBody || 'A new announcement was posted for your family.',
+      entityType: 'announcement',
+      entityId: announcement.id,
+      linkPath: '/announcements',
+      actorUserId: req.user.id,
+      referenceKey: `announcement-${announcement.id}`,
     });
 
     res.status(201).json(announcement);
@@ -152,6 +170,69 @@ exports.deleteAnnouncement = async (req, res, next) => {
       entityId: Number(id),
       summary: result.rows[0].title,
     });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ── In-app notification feed (header bell) ──
+
+exports.listFeed = async (req, res, next) => {
+  try {
+    const familyId = req.familyId;
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 30, 1), 100);
+
+    const unreadResult = await db.query(
+      `SELECT COUNT(*)::int AS c FROM user_notifications
+       WHERE user_id = $1 AND family_id = $2 AND read_at IS NULL`,
+      [req.user.id, familyId]
+    );
+
+    const itemsResult = await db.query(
+      `SELECT id, type, title, body, entity_type, entity_id, link_path,
+              actor_user_id, read_at, created_at
+       FROM user_notifications
+       WHERE user_id = $1 AND family_id = $2
+       ORDER BY created_at DESC
+       LIMIT $3`,
+      [req.user.id, familyId, limit]
+    );
+
+    res.json({
+      items: itemsResult.rows,
+      unreadCount: unreadResult.rows[0]?.c ?? 0,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.markFeedRead = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const result = await db.query(
+      `UPDATE user_notifications SET read_at = NOW()
+       WHERE id = $1 AND user_id = $2 AND family_id = $3 AND read_at IS NULL
+       RETURNING id`,
+      [id, req.user.id, req.familyId]
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Notification not found' });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.markAllFeedRead = async (req, res, next) => {
+  try {
+    await db.query(
+      `UPDATE user_notifications SET read_at = NOW()
+       WHERE user_id = $1 AND family_id = $2 AND read_at IS NULL`,
+      [req.user.id, req.familyId]
+    );
     res.json({ ok: true });
   } catch (err) {
     next(err);

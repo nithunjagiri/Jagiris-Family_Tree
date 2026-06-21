@@ -11,6 +11,7 @@ export default function AdminAnnouncements() {
   const [error, setError] = useState('');
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  const [targetAudience, setTargetAudience] = useState('all');
   const [sending, setSending] = useState(false);
   const [success, setSuccess] = useState('');
   const limit = 20;
@@ -39,9 +40,14 @@ export default function AdminAnnouncements() {
     setError('');
     setSuccess('');
     try {
-      await notificationsApi.createAnnouncement({ title: title.trim(), body: body.trim() || undefined });
+      await notificationsApi.createAnnouncement({
+        title: title.trim(),
+        body: body.trim() || undefined,
+        target_audience: targetAudience,
+      });
       setTitle('');
       setBody('');
+      setTargetAudience('all');
       setSuccess('Announcement sent successfully!');
       setOffset(0);
       load();
@@ -93,13 +99,27 @@ export default function AdminAnnouncements() {
             rows={3}
             className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
           />
+          <div>
+            <label htmlFor="announcement-audience" className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+              Send to
+            </label>
+            <select
+              id="announcement-audience"
+              value={targetAudience}
+              onChange={(e) => setTargetAudience(e.target.value)}
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+            >
+              <option value="all">All family members</option>
+              <option value="admins">Admins only</option>
+            </select>
+          </div>
           <button
             type="submit"
             disabled={sending || !title.trim()}
             className="inline-flex items-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
           >
             <Send className="h-4 w-4" />
-            {sending ? 'Sending...' : 'Send to all family members'}
+            {sending ? 'Sending...' : targetAudience === 'admins' ? 'Send to admins' : 'Send to all family members'}
           </button>
         </div>
       </form>
@@ -144,6 +164,7 @@ export default function AdminAnnouncements() {
                   )}
                   <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
                     {a.created_by_username && `by ${a.created_by_username} · `}
+                    {a.target_audience === 'admins' && 'admins only · '}
                     {a.created_at ? new Date(a.created_at).toLocaleString() : ''}
                     {a.sent_at && ' · Delivered'}
                   </p>
