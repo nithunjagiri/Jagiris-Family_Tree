@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { KeyRound, Download, UserX, Shield, ClipboardCheck, User, Camera, X } from 'lucide-react';
 import { accountApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -762,6 +762,13 @@ export default function AccountPrivacy() {
           <Shield className="h-5 w-5 text-gray-500" />
           Privacy notes
         </h2>
+        <p className="mb-3 text-sm text-gray-600 dark:text-gray-400">
+          Read our full{' '}
+          <Link to="/privacy-policy" className="font-medium text-primary-600 hover:underline dark:text-primary-400">
+            Privacy Policy
+          </Link>{' '}
+          for details on data collection, third-party services, retention, and your choices.
+        </p>
         <ul className="list-inside list-disc space-y-2 text-sm text-gray-600 dark:text-gray-400">
           <li>Use a strong, unique password and keep your device locked when others may access it.</li>
           <li>Exports may contain personal data—store files securely and delete copies you no longer need.</li>

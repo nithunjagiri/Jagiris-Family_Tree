@@ -21,6 +21,7 @@ import PlacesMap from './pages/PlacesMap';
 import GlobalSearch from './pages/GlobalSearch';
 import AccountPrivacy from './pages/AccountPrivacy';
 import ContactUs from './pages/ContactUs';
+import PrivacyPolicy from './pages/PrivacyPolicy';
 import AdminAudit from './pages/AdminAudit';
 import AdminUsers from './pages/AdminUsers';
 import AdminUserEdit from './pages/AdminUserEdit';
@@ -93,6 +94,7 @@ export default function App() {
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/privacy-policy" element={<PrivacyPolicy />} />
       <Route
         path="/"
         element={

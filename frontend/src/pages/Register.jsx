@@ -193,6 +193,13 @@ export default function Register() {
               />
             </div>
             {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+            <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+              By registering, you agree to our{' '}
+              <Link to="/privacy-policy" className="font-medium text-primary-600 hover:underline dark:text-primary-400">
+                Privacy Policy
+              </Link>
+              .
+            </p>
             <button
               type="submit"
               disabled={loading}

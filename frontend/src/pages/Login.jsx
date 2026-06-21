@@ -108,6 +108,11 @@ export default function Login() {
               Register
             </Link>
           </p>
+          <p className="mt-3 text-center text-xs text-gray-500 dark:text-gray-400">
+            <Link to="/privacy-policy" className="hover:text-primary-600 hover:underline dark:hover:text-primary-400">
+              Privacy Policy
+            </Link>
+          </p>
         </div>
       </div>
     </div>
