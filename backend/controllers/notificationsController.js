@@ -3,7 +3,16 @@ const { logAudit } = require('../lib/auditLog');
 const { sendToUsers } = require('../lib/fcmSender');
 const { scheduleInAppNotification } = require('../lib/inAppNotifications');
 const { getFamilyRecipientUserIds } = require('../lib/notificationRecipients');
+const { ensureAnnouncementsSchema } = require('../database/ensureAnnouncementsSchema');
 const { body, validationResult } = require('express-validator');
+
+async function ensureAnnouncementsAndRetry(err, retryFn) {
+  if (err && err.code === '42P01') {
+    await ensureAnnouncementsSchema();
+    return retryFn();
+  }
+  throw err;
+}
 
 // ── Push token management ──
 
@@ -84,7 +93,7 @@ exports.createAnnouncement = async (req, res, next) => {
         const userIds = await getFamilyRecipientUserIds(familyId, { targetAudience });
         if (userIds.length > 0) {
           const refKey = `announcement-${announcement.id}`;
-          const linkPath = '/announcements';
+          const linkPath = '/#dashboard-announcements';
           await sendToUsers(
             userIds,
             'announcement',
@@ -112,43 +121,63 @@ exports.createAnnouncement = async (req, res, next) => {
       body: announcementBody || 'A new announcement was posted for your family.',
       entityType: 'announcement',
       entityId: announcement.id,
-      linkPath: '/announcements',
+      linkPath: '/#dashboard-announcements',
       actorUserId: req.user.id,
       referenceKey: `announcement-${announcement.id}`,
     });
 
     res.status(201).json(announcement);
   } catch (err) {
+    if (err.code === '42P01') {
+      try {
+        await ensureAnnouncementsSchema();
+        return exports.createAnnouncement(req, res, next);
+      } catch (err2) {
+        return next(err2);
+      }
+    }
     next(err);
   }
 };
 
 exports.listAnnouncements = async (req, res, next) => {
-  try {
+  const run = async () => {
     const familyId = req.familyId;
-    const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 200);
-    const offset = Math.max(parseInt(req.query.offset) || 0, 0);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+    const isAdmin = req.user.isAdmin === true;
 
     const countResult = await db.query(
-      `SELECT COUNT(*)::int AS total FROM announcements WHERE family_id = $1`,
-      [familyId]
+      `SELECT COUNT(*)::int AS total FROM announcements
+       WHERE family_id = $1
+         AND ($2::boolean OR COALESCE(target_audience, 'all') = 'all')`,
+      [familyId, isAdmin]
     );
     const result = await db.query(
       `SELECT a.*, u.username AS created_by_username
        FROM announcements a
        LEFT JOIN users u ON u.id = a.created_by
        WHERE a.family_id = $1
+         AND ($2::boolean OR COALESCE(a.target_audience, 'all') = 'all')
        ORDER BY a.created_at DESC
-       LIMIT $2 OFFSET $3`,
-      [familyId, limit, offset]
+       LIMIT $3 OFFSET $4`,
+      [familyId, isAdmin, limit, offset]
     );
 
-    res.json({
+    return {
       items: result.rows,
       total: countResult.rows[0].total,
-    });
+    };
+  };
+
+  try {
+    res.json(await run());
   } catch (err) {
-    next(err);
+    try {
+      res.json(await ensureAnnouncementsAndRetry(err, run));
+    } catch (err2) {
+      next(err2);
+    }
   }
 };
 

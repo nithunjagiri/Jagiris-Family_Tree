@@ -44,6 +44,65 @@ function getScaledSize(width, height, maxWidth, maxHeight) {
   };
 }
 
+function clamp01(value) {
+  return Math.min(1, Math.max(0, Number(value) || 0));
+}
+
+/**
+ * Compute source crop rectangle in image pixel space.
+ * Shared by canvas export and crop preview (WYSIWYG).
+ */
+export function computeCropSourceRect(iw, ih, aspectRatio, zoom, offsetX, offsetY) {
+  const z = Math.max(1, Number(zoom) || 1);
+  const ox = clamp01(offsetX ?? 0.5);
+  const oy = clamp01(offsetY ?? 0.5);
+  const ratio = aspectRatio > 0 ? aspectRatio : 1;
+
+  const imageAspect = iw / ih;
+  let sw;
+  let sh;
+
+  if (imageAspect > ratio) {
+    sh = ih / z;
+    sw = sh * ratio;
+  } else {
+    sw = iw / z;
+    sh = sw / ratio;
+  }
+
+  sw = Math.min(Math.max(1, sw), iw);
+  sh = Math.min(Math.max(1, sh), ih);
+
+  const maxX = Math.max(0, iw - sw);
+  const maxY = Math.max(0, ih - sh);
+
+  return {
+    sx: Math.round(maxX * ox),
+    sy: Math.round(maxY * oy),
+    sw: Math.round(sw),
+    sh: Math.round(sh),
+  };
+}
+
+/** Preview image style so visible region matches computeCropSourceRect output. */
+export function cropPreviewImageStyle(iw, ih, aspectRatio, zoom, offsetX, offsetY) {
+  if (!iw || !ih) {
+    return { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' };
+  }
+  const { sx, sy, sw, sh } = computeCropSourceRect(iw, ih, aspectRatio, zoom, offsetX, offsetY);
+  return {
+    position: 'absolute',
+    width: `${(iw / sw) * 100}%`,
+    height: `${(ih / sh) * 100}%`,
+    left: `${-(sx / sw) * 100}%`,
+    top: `${-(sy / sh) * 100}%`,
+    maxWidth: 'none',
+    maxHeight: 'none',
+    touchAction: 'none',
+    userSelect: 'none',
+  };
+}
+
 async function renderToCanvas(
   file,
   {
@@ -57,28 +116,10 @@ async function renderToCanvas(
   } = {}
 ) {
   const img = await loadImageFromFile(file);
-  let sx = 0;
-  let sy = 0;
-  let sw = img.naturalWidth || img.width;
-  let sh = img.naturalHeight || img.height;
-
-  const ratio = cropSquare ? 1 : aspectRatio;
-  if (ratio) {
-    const sourceRatio = sw / sh;
-    if (sourceRatio > ratio) {
-      const baseW = sh * ratio;
-      sw = baseW / zoom;
-      sh /= zoom;
-    } else {
-      const baseH = sw / ratio;
-      sw /= zoom;
-      sh = baseH / zoom;
-    }
-    const maxX = (img.naturalWidth || img.width) - sw;
-    const maxY = (img.naturalHeight || img.height) - sh;
-    sx = Math.round(Math.max(0, Math.min(maxX, maxX * offsetX)));
-    sy = Math.round(Math.max(0, Math.min(maxY, maxY * offsetY)));
-  }
+  const iw = img.naturalWidth || img.width;
+  const ih = img.naturalHeight || img.height;
+  const ratio = cropSquare ? 1 : aspectRatio || 1;
+  const { sx, sy, sw, sh } = computeCropSourceRect(iw, ih, ratio, zoom, offsetX, offsetY);
 
   const size = getScaledSize(sw, sh, maxWidth, maxHeight);
   const canvas = document.createElement('canvas');

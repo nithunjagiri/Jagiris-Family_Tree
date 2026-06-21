@@ -15,7 +15,6 @@ import AddMemberForm from './pages/AddMemberForm';
 import PhotoGallery from './pages/PhotoGallery';
 import UploadPhotoForm from './pages/UploadPhotoForm';
 import Events from './pages/Events';
-import Announcements from './pages/Announcements';
 import FamilyTree from './pages/FamilyTree';
 import MemberProfile from './pages/MemberProfile';
 import PlacesMap from './pages/PlacesMap';
@@ -123,7 +122,6 @@ export default function App() {
         <Route path="gallery" element={<PhotoGallery />} />
         <Route path="gallery/upload" element={<UploadPhotoForm />} />
         <Route path="events" element={<Events />} />
-        <Route path="announcements" element={<Announcements />} />
         <Route path="family-tree" element={<FamilyTree />} />
         <Route path="places" element={<PlacesMap />} />
         <Route path="search" element={<GlobalSearch />} />

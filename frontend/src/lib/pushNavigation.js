@@ -19,7 +19,7 @@ export function navigateFromPushNotification(notification) {
       window.location.href = '/events';
       break;
     case 'announcement':
-      window.location.href = '/announcements';
+      window.location.href = '/#dashboard-announcements';
       break;
     case 'birthday':
     case 'anniversary':

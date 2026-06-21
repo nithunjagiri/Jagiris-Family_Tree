@@ -15,6 +15,7 @@ const accountRoutes = require('./routes/account');
 const adminRoutes = require('./routes/admin');
 const notificationsRoutes = require('./routes/notifications');
 const { ensurePlacesAuditSchema } = require('./database/ensurePlacesAuditSchema');
+const { ensureAnnouncementsSchema } = require('./database/ensureAnnouncementsSchema');
 const { startScheduler } = require('./lib/notificationScheduler');
 
 const app = express();
@@ -57,6 +58,12 @@ app.use((err, req, res, next) => {
 });
 
 (async () => {
+  try {
+    await ensureAnnouncementsSchema();
+    console.log('Database: announcements table is ready.');
+  } catch (err) {
+    console.error('Announcements schema ensure failed:', err.message);
+  }
   try {
     await ensurePlacesAuditSchema();
     console.log(

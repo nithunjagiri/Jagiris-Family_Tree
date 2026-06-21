@@ -8,7 +8,6 @@ const baseNav = [
   { to: '/family-members', label: 'Family Members', icon: Users },
   { to: '/gallery', label: 'Photo Gallery', icon: Image },
   { to: '/events', label: 'Events', icon: Calendar },
-  { to: '/announcements', label: 'Announcements', icon: Megaphone },
   { to: '/family-tree', label: 'Family Tree', icon: GitBranch },
   { to: '/places', label: 'Places & map', icon: MapPin },
   { to: '/search', label: 'Search', icon: Search },
@@ -16,11 +15,18 @@ const baseNav = [
   { to: '/account', label: 'Account & privacy', icon: Settings },
 ];
 
+const adminAnnouncementsNav = {
+  to: '/admin/announcements',
+  label: 'Announcements',
+  icon: Megaphone,
+  adminAnnouncements: true,
+};
+
 export default function Sidebar({ open, onClose }) {
   const { isAdmin } = useAuth();
   const { pathname } = useLocation();
   const nav = isAdmin
-    ? [...baseNav, { to: '/admin/users', label: 'Admin portal', icon: Shield, adminPortal: true }]
+    ? [...baseNav, adminAnnouncementsNav, { to: '/admin/users', label: 'Admin portal', icon: Shield, adminPortal: true }]
     : baseNav;
   return (
     <>
@@ -40,7 +46,7 @@ export default function Sidebar({ open, onClose }) {
         )}
       >
         <nav className="flex flex-col gap-1 p-2 md:p-2 md:pt-3">
-          {nav.map(({ to, label, icon: Icon, adminPortal }) => (
+          {nav.map(({ to, label, icon: Icon, adminPortal, adminAnnouncements }) => (
             <NavLink
               key={to}
               to={to}
@@ -50,7 +56,11 @@ export default function Sidebar({ open, onClose }) {
               className={({ isActive }) =>
                 cn(
                   'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors md:justify-center md:gap-0 md:px-2 md:py-2.5 md:group-hover/sidebar:justify-start md:group-hover/sidebar:gap-3 md:group-hover/sidebar:px-3',
-                  (adminPortal ? pathname.startsWith('/admin') : isActive)
+                  (adminPortal
+                    ? pathname.startsWith('/admin') && !pathname.startsWith('/admin/announcements')
+                    : adminAnnouncements
+                      ? pathname.startsWith('/admin/announcements')
+                      : isActive)
                     ? 'bg-primary-600 text-white md:bg-slate-800 md:text-white'
                     : 'text-slate-200 hover:bg-slate-800/90 hover:text-white'
                 )

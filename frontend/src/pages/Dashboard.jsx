@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import {
   Users,
   Image,
@@ -12,6 +12,7 @@ import {
   Droplets,
   Phone,
   MessageCircle,
+  Megaphone,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -26,7 +27,7 @@ import {
   Cell,
   Legend,
 } from 'recharts';
-import { familyMembersApi, photosApi, eventsApi } from '../services/api';
+import { familyMembersApi, photosApi, eventsApi, notificationsApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../lib/utils';
 import { HIDE_RELATION_NAMES_IN_UI } from '../lib/appDisplaySettings';
@@ -149,10 +150,12 @@ function StatTile({ label, value, hint, to, onClick, icon: Icon, accent }) {
 }
 
 export default function Dashboard() {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
+  const location = useLocation();
   const [members, setMembers] = useState([]);
   const [recentPhotos, setRecentPhotos] = useState([]);
   const [upcomingEvents, setUpcomingEvents] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
   const chart = useChartTheme();
   const [selectedBloodGroup, setSelectedBloodGroup] = useState('');
@@ -161,15 +164,17 @@ export default function Dashboard() {
     let cancelled = false;
     async function load() {
       try {
-        const [membersRes, photosRes, eventsRes] = await Promise.all([
+        const [membersRes, photosRes, eventsRes, announcementsRes] = await Promise.all([
           familyMembersApi.list(),
           photosApi.list(),
           eventsApi.list(true),
+          notificationsApi.listAnnouncements({ limit: 8, offset: 0 }).catch(() => ({ data: { items: [] } })),
         ]);
         if (!cancelled) {
           setMembers(membersRes.data || []);
           setRecentPhotos((photosRes.data || []).slice(0, 6));
           setUpcomingEvents((eventsRes.data || []).slice(0, 6));
+          setAnnouncements(announcementsRes.data?.items || []);
         }
       } catch (_) {
         if (!cancelled) {
@@ -184,6 +189,17 @@ export default function Dashboard() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (loading) return;
+    const scrollTarget =
+      location.state?.scrollTo ||
+      (location.hash === '#dashboard-announcements' ? 'dashboard-announcements' : null);
+    if (!scrollTarget) return;
+    requestAnimationFrame(() => {
+      document.getElementById(scrollTarget)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, [loading, location.state?.scrollTo, location.hash]);
 
   const membersCount = members.length;
   const { living, deceased } = useMemo(() => livingCounts(members), [members]);
@@ -661,6 +677,50 @@ export default function Dashboard() {
             )}
           </ul>
         </div>
+      </section>
+
+      {/* Announcements — full width below photos & events */}
+      <section
+        id="dashboard-announcements"
+        className="rounded-2xl border border-gray-200/80 bg-white shadow-soft dark:border-gray-800 dark:bg-gray-900 dark:shadow-soft-dark"
+      >
+        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4 dark:border-gray-800">
+          <div className="flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-50 text-primary-600 dark:bg-primary-950/50 dark:text-primary-400">
+              <Megaphone className="h-4 w-4" />
+            </span>
+            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Announcements</h2>
+          </div>
+          {isAdmin && (
+            <Link
+              to="/admin/announcements"
+              className="text-sm font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400"
+            >
+              Post announcement
+            </Link>
+          )}
+        </div>
+        <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+          {announcements.length === 0 ? (
+            <li className="px-5 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
+              No announcements yet.
+              {isAdmin ? ' Use “Post announcement” to share news with your family.' : ''}
+            </li>
+          ) : (
+            announcements.map((a) => (
+              <li key={a.id} className="px-5 py-4">
+                <p className="font-medium text-gray-900 dark:text-white">{a.title}</p>
+                {a.body && (
+                  <p className="mt-1 line-clamp-3 text-sm text-gray-600 dark:text-gray-300">{a.body}</p>
+                )}
+                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                  {a.created_by_username && `by ${a.created_by_username} · `}
+                  {a.created_at ? new Date(a.created_at).toLocaleString() : ''}
+                </p>
+              </li>
+            ))
+          )}
+        </ul>
       </section>
 
       {selectedBloodGroup && (

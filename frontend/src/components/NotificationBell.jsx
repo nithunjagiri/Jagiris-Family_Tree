@@ -41,7 +41,16 @@ export default function NotificationBell() {
   const handleItemClick = async (item) => {
     if (!item.read_at) await markRead(item.id);
     setOpen(false);
-    if (item.link_path) navigate(item.link_path);
+    const path = item.link_path;
+    const scrollToAnnouncements =
+      path === '/announcements' ||
+      path === '/#dashboard-announcements' ||
+      path?.endsWith('#dashboard-announcements');
+    if (scrollToAnnouncements) {
+      navigate('/', { state: { scrollTo: 'dashboard-announcements' } });
+    } else if (path) {
+      navigate(path);
+    }
   };
 
   return (
