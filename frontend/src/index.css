@@ -46,6 +46,27 @@
   }
 }
 
+@layer components {
+  :root {
+    --app-toolbar-height: 3.5rem;
+    --app-safe-top: env(safe-area-inset-top, 0px);
+    --app-topbar-total: calc(var(--app-safe-top) + var(--app-toolbar-height));
+  }
+
+  html.native-app {
+    --app-safe-top: max(env(safe-area-inset-top, 0px), var(--native-status-bar-fallback, 0px));
+  }
+
+  .app-topbar {
+    @apply sticky top-0 z-40 shrink-0 border-b border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900;
+    padding-top: var(--app-safe-top);
+  }
+
+  .app-topbar-row {
+    @apply flex min-h-[var(--app-toolbar-height)] items-center gap-2 px-3 md:gap-4 md:px-6;
+  }
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

@@ -17,6 +17,9 @@ export function initMobileShell() {
   const root = document.documentElement;
   if (isNativeApp()) {
     root.classList.add('native-app');
+    if (Capacitor.getPlatform() === 'android') {
+      root.style.setProperty('--native-status-bar-fallback', '28px');
+    }
   }
   if (isCompactViewport()) {
     root.classList.add('compact-viewport');

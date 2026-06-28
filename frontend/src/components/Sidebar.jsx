@@ -41,8 +41,8 @@ export default function Sidebar({ open, onClose }) {
       <aside
         className={cn(
           'group/sidebar z-30 flex flex-col border-r border-slate-800 bg-slate-900 transition-transform duration-200 dark:border-slate-800',
-          'fixed left-0 top-[calc(3.5rem+env(safe-area-inset-top,0px))] w-64',
-          'max-md:h-[calc(100dvh-3.5rem-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px))] max-md:overflow-y-auto max-md:overscroll-y-contain max-md:pb-safe',
+          'fixed left-0 top-[var(--app-topbar-total)] w-64',
+          'max-md:h-[calc(100dvh-var(--app-topbar-total)-env(safe-area-inset-bottom,0px))] max-md:overflow-y-auto max-md:overscroll-y-contain max-md:pb-safe',
           'md:static md:h-full md:w-16 md:shrink-0 md:translate-x-0 md:overflow-y-auto md:overflow-x-hidden md:transition-[width] md:duration-200 md:ease-out md:hover:w-64',
           open ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         )}
