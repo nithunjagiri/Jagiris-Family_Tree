@@ -5,6 +5,7 @@ import { User, UserPlus, ZoomIn, ZoomOut, Maximize2, Expand, Shrink } from 'luci
 import { familyTreeApi } from '../services/api';
 import { formatCalendarLong } from '../lib/calendarDate';
 import { resolveBackendPublicUrl } from '../lib/backendOrigin';
+import ModulePageHeader from '../components/ModulePageHeader';
 
 const NODE_WIDTH = 140;
 /** SVG foreignObject box — tight; overflow visible so extra text is not clipped. */
@@ -286,20 +287,20 @@ export default function FamilyTree() {
 
   return (
     <div className="flex h-[calc(100vh-5rem)] w-full max-w-none flex-col">
-      <div className="flex flex-shrink-0 flex-col gap-3 border-b border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900 sm:flex-row sm:items-center sm:justify-between md:px-6">
-        <div className="min-w-0 flex-1 space-y-1">
-          <h1 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-white">Family Tree</h1>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Click a card to open profile · Drag to pan · Scroll to zoom · Use toolbar to fit or zoom
-          </p>
-        </div>
-        <Link
-          to="/family-members/add"
-          className="inline-flex shrink-0 items-center gap-2 self-start rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary-700 sm:self-auto"
-        >
-          <UserPlus className="h-5 w-5" aria-hidden />
-          Add New Member
-        </Link>
+      <div className="flex flex-shrink-0 flex-col gap-3 border-b border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900 md:px-6">
+        <ModulePageHeader
+          label="Family Tree"
+          description="Click a card to open profile · Drag to pan · Scroll to zoom · Use toolbar to fit or zoom"
+          actions={
+            <Link
+              to="/family-members/add"
+              className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary-700"
+            >
+              <UserPlus className="h-5 w-5" aria-hidden />
+              Add New Member
+            </Link>
+          }
+        />
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col px-4 pb-4 pt-3 md:px-6 md:pb-6">

@@ -4,6 +4,7 @@ import { Upload, Layers } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { photosApi } from '../services/api';
 import { resolveBackendPublicUrl } from '../lib/backendOrigin';
+import ModulePageHeader from '../components/ModulePageHeader';
 import { getApiErrorMessage } from '../lib/apiErrorMessage';
 import { groupPhotosByAlbum } from '../lib/groupPhotosByAlbum';
 import PhotoLightbox from '../components/PhotoLightbox';
@@ -74,16 +75,18 @@ export default function PhotoGallery() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Photo Gallery</h1>
-        <Link
-          to="/gallery/upload"
-          className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 font-medium text-white transition-colors hover:bg-primary-700"
-        >
-          <Upload className="h-5 w-5" />
-          Upload Photos
-        </Link>
-      </div>
+      <ModulePageHeader
+        label="Photo Gallery"
+        actions={
+          <Link
+            to="/gallery/upload"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 font-medium text-white transition-colors hover:bg-primary-700"
+          >
+            <Upload className="h-5 w-5" />
+            Upload Photos
+          </Link>
+        }
+      />
 
       <div className="columns-2 gap-4 sm:columns-3 lg:columns-4">
         {albums.map((album) => (

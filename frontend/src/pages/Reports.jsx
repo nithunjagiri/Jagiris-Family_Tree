@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import Breadcrumb from '../components/Breadcrumb';
+import ModulePageHeader from '../components/ModulePageHeader';
 import { familyMembersApi } from '../services/api';
 import { cn } from '../lib/utils';
 import { buildReportSummaries, REPORT_SECTIONS } from '../lib/reportsAnalytics';
@@ -60,9 +60,9 @@ export default function Reports() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <Breadcrumb backTo="/" items={[{ label: 'Home', to: '/' }, { label: 'Reports' }]} />
-      </div>
+      <ModulePageHeader
+        label="Reports"
+      />
 
       {loading ? (
         <div className="flex min-h-[40vh] items-center justify-center">

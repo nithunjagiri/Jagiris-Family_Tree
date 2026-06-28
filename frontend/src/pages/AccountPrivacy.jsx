@@ -10,6 +10,7 @@ import { resolveBackendPublicUrl } from '../lib/backendOrigin';
 import { compressImageFile, formatFileSize, IMAGE_ACCEPTED_TYPES, ONE_MB } from '../lib/imageProcessing';
 import ImageCropModal from '../components/ImageCropModal';
 import { SHOW_PRIVACY_RECORD } from '../lib/appDisplaySettings';
+import ModulePageHeader from '../components/ModulePageHeader';
 
 const PROFILE_GENDER_OPTIONS = [
   { value: '', label: 'Not set' },
@@ -295,24 +296,26 @@ export default function AccountPrivacy() {
 
   return (
     <div className="w-full max-w-none space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Account &amp; privacy</h1>
-        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-          Signed in as{' '}
-          <span className="font-medium text-gray-800 dark:text-gray-200">
-            {profileUser?.username || user?.username}
-          </span>
-          {(profileUser?.email || user?.email) ? (
-            <>
-              {' '}
-              · {profileUser?.email || user?.email}
-            </>
-          ) : null}
-        </p>
-        {privacyLoadErr && (
-          <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">{privacyLoadErr}</p>
-        )}
-      </div>
+      <ModulePageHeader
+        label="Account & privacy"
+        description={
+          <>
+            Signed in as{' '}
+            <span className="font-medium text-gray-800 dark:text-gray-200">
+              {profileUser?.username || user?.username}
+            </span>
+            {(profileUser?.email || user?.email) ? (
+              <>
+                {' '}
+                · {profileUser?.email || user?.email}
+              </>
+            ) : null}
+          </>
+        }
+      />
+      {privacyLoadErr && (
+        <p className="-mt-4 text-sm text-amber-700 dark:text-amber-300">{privacyLoadErr}</p>
+      )}
 
       <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-soft dark:border-gray-800 dark:bg-gray-900">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">

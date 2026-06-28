@@ -5,6 +5,7 @@ import { cn } from '../lib/utils';
 import { getApiErrorMessage } from '../lib/apiErrorMessage';
 import { eventCalendarParts } from '../lib/calendarDate';
 import { resolveBackendPublicUrl } from '../lib/backendOrigin';
+import ModulePageHeader from '../components/ModulePageHeader';
 import {
   compressImageFile,
   formatFileSize,
@@ -135,28 +136,30 @@ export default function Events() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Events</h1>
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-            <input
-              type="checkbox"
-              checked={upcoming}
-              onChange={(e) => setUpcoming(e.target.checked)}
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-            />
-            Upcoming only
-          </label>
-          <button
-            type="button"
-            onClick={() => setShowForm(true)}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 font-medium text-white transition-colors hover:bg-primary-700"
-          >
-            <Plus className="h-5 w-5" />
-            Add Event
-          </button>
-        </div>
-      </div>
+      <ModulePageHeader
+        label="Events"
+        actions={
+          <>
+            <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+              <input
+                type="checkbox"
+                checked={upcoming}
+                onChange={(e) => setUpcoming(e.target.checked)}
+                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              />
+              Upcoming only
+            </label>
+            <button
+              type="button"
+              onClick={() => setShowForm(true)}
+              className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 font-medium text-white transition-colors hover:bg-primary-700"
+            >
+              <Plus className="h-5 w-5" />
+              Add Event
+            </button>
+          </>
+        }
+      />
 
       {showForm && (
         <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-soft dark:border-gray-800 dark:bg-gray-900">

@@ -4,6 +4,7 @@ import { Search as SearchIcon, Users, Calendar, Image } from 'lucide-react';
 import { searchApi } from '../services/api';
 import { formatCalendarLong } from '../lib/calendarDate';
 import { HIDE_RELATION_NAMES_IN_UI } from '../lib/appDisplaySettings';
+import ModulePageHeader from '../components/ModulePageHeader';
 
 export default function GlobalSearch() {
   const [q, setQ] = useState('');
@@ -39,12 +40,10 @@ export default function GlobalSearch() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Search</h1>
-        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-          Search across family members, events, and gallery titles in one place.
-        </p>
-      </div>
+      <ModulePageHeader
+        label="Search"
+        description="Search across family members, events, and gallery titles in one place."
+      />
 
       <div className="relative">
         <SearchIcon className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />

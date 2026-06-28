@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import { Link, useSearchParams } from 'react-router-dom';
 import L from 'leaflet';
-import { MapPin, Plus, Trash2, Users, ChevronRight, Home } from 'lucide-react';
+import { MapPin, Plus, Trash2, Users, ChevronRight, Home, Navigation } from 'lucide-react';
 import { placesApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../lib/utils';
 import { getApiErrorMessage } from '../lib/apiErrorMessage';
 import { resolveBackendPublicUrl } from '../lib/backendOrigin';
+import { buildGoogleMapsDirectionsUrl, mergeMembersById } from '../lib/maps';
+import ModulePageHeader from '../components/ModulePageHeader';
 
 import 'leaflet/dist/leaflet.css';
 
@@ -43,6 +45,92 @@ function FlyToLocation({ lat, lng }) {
 
 const selectClass =
   'mobile-input w-full appearance-none rounded-lg border-0 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm ring-1 ring-gray-200 transition-shadow focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-gray-900 dark:text-white dark:ring-gray-700';
+
+/** ~12 member rows visible before scrolling */
+const MEMBER_LIST_MAX_CLASS = 'max-h-[420px]';
+
+function displayMemberName(m) {
+  return [m.name, m.surname].filter(Boolean).join(' ') || 'Unnamed';
+}
+
+function MapPinPopup({ pin }) {
+  const [members, setMembers] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    Promise.all([placesApi.membersByPlace(pin.name, 'birth'), placesApi.membersByPlace(pin.name, 'residence')])
+      .then(([birthRes, residenceRes]) => {
+        if (cancelled) return;
+        setMembers(
+          mergeMembersById(birthRes.data?.members, residenceRes.data?.members)
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setMembers([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pin.name]);
+
+  const directionsUrl = buildGoogleMapsDirectionsUrl(pin.latitude, pin.longitude);
+
+  return (
+    <div className="map-pin-popup min-w-[240px] max-w-[min(92vw,300px)]">
+      <p className="text-base font-semibold text-gray-900 dark:text-white">{pin.name}</p>
+      {pin.notes ? (
+        <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{pin.notes}</p>
+      ) : null}
+      <p className="mt-0.5 text-xs tabular-nums text-gray-500 dark:text-gray-400">
+        {Number(pin.latitude).toFixed(4)}, {Number(pin.longitude).toFixed(4)}
+      </p>
+
+      <div className="mt-3 border-t border-gray-100 pt-3 dark:border-gray-700">
+        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+          Members at this place
+        </p>
+        {loading ? (
+          <div className="flex justify-center py-4">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
+          </div>
+        ) : members.length === 0 ? (
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            No members matched this place name in birth or current place records.
+          </p>
+        ) : (
+          <ul className={cn('divide-y divide-gray-100 overflow-y-auto overscroll-y-contain dark:divide-gray-700', MEMBER_LIST_MAX_CLASS)}>
+            {members.map((m) => (
+              <li key={m.id}>
+                <Link
+                  to={`/family-members/${m.id}`}
+                  className="flex items-center gap-2 py-2 pr-1 transition-colors hover:text-primary-600 dark:hover:text-primary-400"
+                >
+                  <Users className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                  <span className="min-w-0 truncate text-sm font-medium">{displayMemberName(m)}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <a
+        href={directionsUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary-600 px-3 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary-700"
+      >
+        <Navigation className="h-4 w-4" />
+        Directions
+      </a>
+    </div>
+  );
+}
 
 function PlaceMembersList({ members, loading, emptyMessage, className }) {
   if (loading) {
@@ -134,8 +222,8 @@ function PlaceFilterPanel({
           <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{emptyOptionsMessage}</p>
         )}
         {value ? (
-          <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg ring-1 ring-gray-200 dark:ring-gray-700">
-            <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/80 px-3 py-2 dark:border-gray-800 dark:bg-gray-800/50">
+          <div className={cn('mt-4 overflow-hidden rounded-lg ring-1 ring-gray-200 dark:ring-gray-700', MEMBER_LIST_MAX_CLASS, 'flex flex-col')}>
+            <div className="flex shrink-0 items-center justify-between border-b border-gray-100 bg-gray-50/80 px-3 py-2 dark:border-gray-800 dark:bg-gray-800/50">
               <p className="text-xs font-medium text-gray-600 dark:text-gray-300">{membersTitle}</p>
               {!loading && (
                 <span className="rounded-full bg-primary-100 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary-700 dark:bg-primary-950/60 dark:text-primary-300">
@@ -295,23 +383,20 @@ export default function PlacesMap() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Places &amp; map</h1>
-          <p className="mt-1 max-w-2xl text-sm text-gray-600 dark:text-gray-400">
-            Birth and current places from your family records appear below the map. Add named pins on the map for
-            reunions, ancestral villages, or any location you want the family to remember together.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setFormOpen((o) => !o)}
-          className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 font-medium text-white transition-colors hover:bg-primary-700"
-        >
-          <Plus className="h-5 w-5" />
-          Add map pin
-        </button>
-      </div>
+      <ModulePageHeader
+        label="Places & map"
+        description="Birth and current places from your family records appear below the map. Add named pins on the map for reunions, ancestral villages, or any location you want the family to remember together."
+        actions={
+          <button
+            type="button"
+            onClick={() => setFormOpen((o) => !o)}
+            className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 font-medium text-white transition-colors hover:bg-primary-700"
+          >
+            <Plus className="h-5 w-5" />
+            Add map pin
+          </button>
+        }
+      />
 
       {error && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
@@ -387,92 +472,98 @@ export default function PlacesMap() {
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-3 lg:items-stretch">
-        <div className="flex flex-col gap-6 lg:col-span-2">
-          <div className="overflow-hidden rounded-2xl border border-gray-200/80 shadow-soft dark:border-gray-800">
-            {loading ? (
-              <div className="flex h-[360px] items-center justify-center bg-gray-100 dark:bg-gray-900 md:h-[420px]">
-                <div className="h-9 w-9 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
-              </div>
-            ) : (
-              <div className={cn('relative h-[360px] w-full md:h-[420px]', 'leaflet-map-wrap')}>
-                <MapContainer center={center} zoom={zoom} className="h-full w-full" scrollWheelZoom>
-                  <MapResize />
-                  {highlightLat != null && highlightLng != null && (
-                    <FlyToLocation lat={highlightLat} lng={highlightLng} />
-                  )}
-                  <TileLayer
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  />
-                  {highlightLat != null && highlightLng != null && (
-                    <Marker position={[highlightLat, highlightLng]}>
-                      <Popup>{highlightName || 'Selected location'}</Popup>
-                    </Marker>
-                  )}
-                  {(data.pins || []).map((p) => (
-                    <Marker key={p.id} position={[Number(p.latitude), Number(p.longitude)]}>
-                      <Popup>
-                        <strong>{p.name}</strong>
-                        {p.notes ? <p className="mt-1 text-sm">{p.notes}</p> : null}
-                      </Popup>
-                    </Marker>
-                  ))}
-                </MapContainer>
-              </div>
-            )}
-          </div>
-
-          <section className="flex min-h-[420px] flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-soft dark:border-gray-800 dark:bg-gray-900 dark:shadow-soft-dark">
-            <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-5 py-4 dark:border-gray-800">
-              <div className="flex items-center gap-3">
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-50 text-primary-600 dark:bg-primary-950/50 dark:text-primary-400">
-                  <Users className="h-4 w-4" />
-                </span>
-                <div>
-                  <h2 className="text-base font-semibold text-gray-900 dark:text-white">Places from members</h2>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Birth and current residence from family records
-                  </p>
-                </div>
-              </div>
+      <div className="grid gap-6 lg:grid-cols-3 lg:grid-rows-[auto_auto]">
+        <div className="overflow-hidden rounded-2xl border border-gray-200/80 shadow-soft dark:border-gray-800 lg:col-span-2">
+          {loading ? (
+            <div className="flex h-[360px] items-center justify-center bg-gray-100 dark:bg-gray-900 md:h-[420px]">
+              <div className="h-9 w-9 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
             </div>
-            <div className="grid min-h-0 flex-1 gap-4 p-4 md:grid-cols-2 md:p-5">
-              <PlaceFilterPanel
-                icon={MapPin}
-                title="Birth place"
-                hint="Where members were born"
-                selectId="birth-place-select"
-                value={birthPlaceSelection}
-                onChange={(e) => setBirthPlaceSelection(e.target.value)}
-                options={data.birthPlaces || []}
-                emptyOptionsMessage="No birth places recorded yet."
-                membersTitle={`Born in ${birthPlaceSelection}`}
-                members={birthMembers}
-                loading={birthMembersLoading}
-                emptyMembersMessage="No members found for this birth place."
-                accentClass="bg-sky-50/80 dark:bg-sky-950/20"
-              />
-              <PlaceFilterPanel
-                icon={Home}
-                title="Current place"
-                hint="Where members live now"
-                selectId="current-place-select"
-                value={currentPlaceSelection}
-                onChange={(e) => setCurrentPlaceSelection(e.target.value)}
-                options={data.currentPlaces || []}
-                emptyOptionsMessage="No current places recorded yet."
-                membersTitle={`Living in ${currentPlaceSelection}`}
-                members={currentMembers}
-                loading={currentMembersLoading}
-                emptyMembersMessage="No members found for this current place."
-                accentClass="bg-emerald-50/80 dark:bg-emerald-950/20"
-              />
+          ) : (
+            <div className={cn('relative h-[360px] w-full md:h-[420px]', 'leaflet-map-wrap')}>
+              <MapContainer center={center} zoom={zoom} className="h-full w-full" scrollWheelZoom>
+                <MapResize />
+                {highlightLat != null && highlightLng != null && (
+                  <FlyToLocation lat={highlightLat} lng={highlightLng} />
+                )}
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+                {highlightLat != null && highlightLng != null && (
+                  <Marker position={[highlightLat, highlightLng]}>
+                    <Popup maxWidth={320} minWidth={240}>
+                      <MapPinPopup
+                        pin={{
+                          name: highlightName || 'Selected location',
+                          latitude: highlightLat,
+                          longitude: highlightLng,
+                          notes: null,
+                        }}
+                      />
+                    </Popup>
+                  </Marker>
+                )}
+                {(data.pins || []).map((p) => (
+                  <Marker key={p.id} position={[Number(p.latitude), Number(p.longitude)]}>
+                    <Popup maxWidth={320} minWidth={240}>
+                      <MapPinPopup pin={p} />
+                    </Popup>
+                  </Marker>
+                ))}
+              </MapContainer>
             </div>
-          </section>
+          )}
         </div>
 
-        <aside className="flex min-h-[420px] flex-col lg:min-h-0">
+        <section className="flex min-h-[480px] flex-col overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-soft dark:border-gray-800 dark:bg-gray-900 dark:shadow-soft-dark lg:col-span-2 lg:row-start-2">
+          <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-5 py-4 dark:border-gray-800">
+            <div className="flex items-center gap-3">
+              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-50 text-primary-600 dark:bg-primary-950/50 dark:text-primary-400">
+                <Users className="h-4 w-4" />
+              </span>
+              <div>
+                <h2 className="text-base font-semibold text-gray-900 dark:text-white">Places from members</h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Birth and current residence from family records
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="grid min-h-0 flex-1 gap-4 p-4 md:grid-cols-2 md:p-5">
+            <PlaceFilterPanel
+              icon={MapPin}
+              title="Birth place"
+              hint="Where members were born"
+              selectId="birth-place-select"
+              value={birthPlaceSelection}
+              onChange={(e) => setBirthPlaceSelection(e.target.value)}
+              options={data.birthPlaces || []}
+              emptyOptionsMessage="No birth places recorded yet."
+              membersTitle={`Born in ${birthPlaceSelection}`}
+              members={birthMembers}
+              loading={birthMembersLoading}
+              emptyMembersMessage="No members found for this birth place."
+              accentClass="bg-sky-50/80 dark:bg-sky-950/20"
+            />
+            <PlaceFilterPanel
+              icon={Home}
+              title="Current place"
+              hint="Where members live now"
+              selectId="current-place-select"
+              value={currentPlaceSelection}
+              onChange={(e) => setCurrentPlaceSelection(e.target.value)}
+              options={data.currentPlaces || []}
+              emptyOptionsMessage="No current places recorded yet."
+              membersTitle={`Living in ${currentPlaceSelection}`}
+              members={currentMembers}
+              loading={currentMembersLoading}
+              emptyMembersMessage="No members found for this current place."
+              accentClass="bg-emerald-50/80 dark:bg-emerald-950/20"
+            />
+          </div>
+        </section>
+
+        <aside className="flex min-h-[480px] flex-col lg:col-start-3 lg:row-start-2">
           <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-soft dark:border-gray-800 dark:bg-gray-900 dark:shadow-soft-dark">
             <div className="flex items-center justify-between gap-2 border-b border-gray-100 px-5 py-4 dark:border-gray-800">
               <div className="flex items-center gap-3">

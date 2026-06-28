@@ -36,8 +36,8 @@ function PrivateRoute({ children }) {
   if (loading) {
     return (
       <div
-        className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-950"
-        style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f9fafb' }}
+        className="standalone-page flex min-h-full items-center justify-center bg-gray-50 dark:bg-gray-950"
+        style={{ minHeight: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f9fafb' }}
       >
         <div
           className="h-10 w-10 animate-spin rounded-full border-2 border-primary-600 border-t-transparent"

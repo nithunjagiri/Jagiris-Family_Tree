@@ -67,7 +67,7 @@ export default function Register() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4 py-12 dark:bg-gray-950">
+    <div className="standalone-page flex min-h-full flex-col items-center justify-center bg-gray-50 px-4 py-12 dark:bg-gray-950">
       <div className="w-full max-w-lg">
         <AuthBranding />
         <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-soft dark:border-gray-800 dark:bg-gray-900 dark:shadow-soft-dark">

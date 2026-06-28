@@ -14,6 +14,7 @@ import {
   getUniqueSurnames,
   hasActiveMemberFilters,
 } from '../lib/memberFilters';
+import ModulePageHeader from '../components/ModulePageHeader';
 
 function displayName(m) {
   return [m.name, m.surname].filter(Boolean).join(' ') || m.name || '';
@@ -218,6 +219,13 @@ export default function FamilyMembers() {
 
   const showNoResults = members.length > 0 && filteredMembers.length === 0 && activeFilters;
 
+  const pageLabel =
+    statusFilter === 'living'
+      ? 'Living Members'
+      : statusFilter === 'deceased'
+        ? 'Deceased Members'
+        : 'Family Members';
+
   return (
     <div className="space-y-6">
       {saveFlash && (
@@ -237,83 +245,79 @@ export default function FamilyMembers() {
         </div>
       )}
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            {statusFilter === 'living'
-              ? 'Living Members'
-              : statusFilter === 'deceased'
-                ? 'Deceased Members'
-                : 'Family Members'}
-          </h1>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setFiltersOpen((o) => !o)}
-              aria-expanded={filtersOpen}
-              aria-label={filtersOpen ? 'Hide filters' : 'Show filters'}
-              className={cn(
-                'inline-flex h-10 items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700',
-                filtersOpen && 'ring-2 ring-primary-500 ring-offset-2 dark:ring-offset-gray-950',
-                activeFilters && 'border-primary-300 dark:border-primary-700'
-              )}
-            >
-              <Filter className="h-4 w-4" />
-              <span className="hidden sm:inline">Filters</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setSearchOpen((o) => !o)}
-              aria-expanded={searchOpen}
-              aria-controls={searchPanelId}
-              aria-label={searchOpen ? 'Hide search' : 'Show search'}
-              className={cn(
-                'inline-flex h-10 w-10 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700',
-                searchOpen && 'ring-2 ring-primary-500 ring-offset-2 dark:ring-offset-gray-950'
-              )}
-            >
-              <Search className="h-5 w-5" />
-            </button>
-            <div className="flex items-center rounded-lg border border-gray-300 p-0.5 dark:border-gray-600">
+        <ModulePageHeader
+          label={pageLabel}
+          actions={
+            <>
               <button
                 type="button"
-                onClick={() => setViewMode('grid')}
-                aria-pressed={viewMode === 'grid'}
-                aria-label="Grid view"
-                title="Grid view"
+                onClick={() => setFiltersOpen((o) => !o)}
+                aria-expanded={filtersOpen}
+                aria-label={filtersOpen ? 'Hide filters' : 'Show filters'}
                 className={cn(
-                  'inline-flex h-9 w-9 items-center justify-center rounded-md transition-colors',
-                  viewMode === 'grid'
-                    ? 'bg-primary-600 text-white'
-                    : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'
+                  'inline-flex h-10 items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700',
+                  filtersOpen && 'ring-2 ring-primary-500 ring-offset-2 dark:ring-offset-gray-950',
+                  activeFilters && 'border-primary-300 dark:border-primary-700'
                 )}
               >
-                <LayoutGrid className="h-4 w-4" />
+                <Filter className="h-4 w-4" />
+                <span className="hidden sm:inline">Filters</span>
               </button>
               <button
                 type="button"
-                onClick={() => setViewMode('list')}
-                aria-pressed={viewMode === 'list'}
-                aria-label="List view"
-                title="List view"
+                onClick={() => setSearchOpen((o) => !o)}
+                aria-expanded={searchOpen}
+                aria-controls={searchPanelId}
+                aria-label={searchOpen ? 'Hide search' : 'Show search'}
                 className={cn(
-                  'inline-flex h-9 w-9 items-center justify-center rounded-md transition-colors',
-                  viewMode === 'list'
-                    ? 'bg-primary-600 text-white'
-                    : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'
+                  'inline-flex h-10 w-10 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700',
+                  searchOpen && 'ring-2 ring-primary-500 ring-offset-2 dark:ring-offset-gray-950'
                 )}
               >
-                <List className="h-4 w-4" />
+                <Search className="h-5 w-5" />
               </button>
-            </div>
-            <Link
-              to="/family-members/add"
-              className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 font-medium text-white transition-colors hover:bg-primary-700"
-            >
-              <UserPlus className="h-5 w-5" />
-              Add Member
-            </Link>
-          </div>
-        </div>
+              <div className="flex items-center rounded-lg border border-gray-300 p-0.5 dark:border-gray-600">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('grid')}
+                  aria-pressed={viewMode === 'grid'}
+                  aria-label="Grid view"
+                  title="Grid view"
+                  className={cn(
+                    'inline-flex h-9 w-9 items-center justify-center rounded-md transition-colors',
+                    viewMode === 'grid'
+                      ? 'bg-primary-600 text-white'
+                      : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'
+                  )}
+                >
+                  <LayoutGrid className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('list')}
+                  aria-pressed={viewMode === 'list'}
+                  aria-label="List view"
+                  title="List view"
+                  className={cn(
+                    'inline-flex h-9 w-9 items-center justify-center rounded-md transition-colors',
+                    viewMode === 'list'
+                      ? 'bg-primary-600 text-white'
+                      : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'
+                  )}
+                >
+                  <List className="h-4 w-4" />
+                </button>
+              </div>
+              <Link
+                to="/family-members/add"
+                className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 font-medium text-white transition-colors hover:bg-primary-700"
+              >
+                <UserPlus className="h-5 w-5" />
+                Add Member
+              </Link>
+            </>
+          }
+        />
         {filtersOpen && (
           <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
