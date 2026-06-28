@@ -42,26 +42,28 @@ function FlyToLocation({ lat, lng }) {
 }
 
 const selectClass =
-  'mobile-input w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white';
+  'mobile-input w-full appearance-none rounded-lg border-0 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm ring-1 ring-gray-200 transition-shadow focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-gray-900 dark:text-white dark:ring-gray-700';
 
-function PlaceMembersList({ members, loading, emptyMessage }) {
+function PlaceMembersList({ members, loading, emptyMessage, className }) {
   if (loading) {
     return (
-      <div className="flex justify-center py-6">
+      <div className={cn('flex justify-center py-8', className)}>
         <div className="h-7 w-7 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
       </div>
     );
   }
   if (members.length === 0) {
-    return <p className="py-4 text-center text-sm text-gray-500 dark:text-gray-400">{emptyMessage}</p>;
+    return (
+      <p className={cn('py-6 text-center text-sm text-gray-500 dark:text-gray-400', className)}>{emptyMessage}</p>
+    );
   }
   return (
-    <ul className="max-h-64 space-y-2 overflow-y-auto">
+    <ul className={cn('divide-y divide-gray-100 dark:divide-gray-800', className)}>
       {members.map((m) => (
         <li key={m.id}>
           <Link
             to={`/family-members/${m.id}`}
-            className="flex items-center gap-3 rounded-xl border border-gray-100 px-3 py-2.5 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/60"
+            className="flex items-center gap-3 px-3 py-3 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50"
           >
             <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800">
               {m.profile_photo ? (
@@ -87,6 +89,71 @@ function PlaceMembersList({ members, loading, emptyMessage }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+function PlaceFilterPanel({
+  icon: Icon,
+  title,
+  hint,
+  selectId,
+  value,
+  onChange,
+  options,
+  emptyOptionsMessage,
+  membersTitle,
+  members,
+  loading,
+  emptyMembersMessage,
+  accentClass,
+}) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col rounded-xl border border-gray-200/80 bg-white shadow-sm dark:border-gray-700/80 dark:bg-gray-900/60">
+      <div className={cn('flex items-center gap-3 border-b border-gray-100 px-4 py-3 dark:border-gray-800', accentClass)}>
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/80 text-primary-600 shadow-sm dark:bg-gray-900/80 dark:text-primary-400">
+          <Icon className="h-4 w-4" />
+        </span>
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{title}</h3>
+          <p className="text-xs text-gray-500 dark:text-gray-400">{hint}</p>
+        </div>
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col p-4">
+        <label htmlFor={selectId} className="sr-only">
+          {title}
+        </label>
+        <select id={selectId} value={value} onChange={onChange} className={selectClass}>
+          <option value="">Choose a place…</option>
+          {options.map((row) => (
+            <option key={row.place} value={row.place}>
+              {row.place} ({row.member_count})
+            </option>
+          ))}
+        </select>
+        {options.length === 0 && (
+          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{emptyOptionsMessage}</p>
+        )}
+        {value ? (
+          <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg ring-1 ring-gray-200 dark:ring-gray-700">
+            <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/80 px-3 py-2 dark:border-gray-800 dark:bg-gray-800/50">
+              <p className="text-xs font-medium text-gray-600 dark:text-gray-300">{membersTitle}</p>
+              {!loading && (
+                <span className="rounded-full bg-primary-100 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary-700 dark:bg-primary-950/60 dark:text-primary-300">
+                  {members.length}
+                </span>
+              )}
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
+              <PlaceMembersList members={members} loading={loading} emptyMessage={emptyMembersMessage} />
+            </div>
+          </div>
+        ) : (
+          <p className="mt-4 flex flex-1 items-center justify-center rounded-lg border border-dashed border-gray-200 px-4 py-8 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
+            Select a place above to view members
+          </p>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -320,15 +387,15 @@ export default function PlacesMap() {
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-3 lg:items-start">
-        <div className="space-y-6 lg:col-span-2">
-          <div className="overflow-hidden rounded-2xl border border-gray-200 shadow-soft dark:border-gray-800">
+      <div className="grid gap-6 lg:grid-cols-3 lg:items-stretch">
+        <div className="flex flex-col gap-6 lg:col-span-2">
+          <div className="overflow-hidden rounded-2xl border border-gray-200/80 shadow-soft dark:border-gray-800">
             {loading ? (
-              <div className="flex h-[420px] items-center justify-center bg-gray-100 dark:bg-gray-900">
+              <div className="flex h-[360px] items-center justify-center bg-gray-100 dark:bg-gray-900 md:h-[420px]">
                 <div className="h-9 w-9 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
               </div>
             ) : (
-              <div className={cn('relative h-[420px] w-full max-sm:h-[360px]', 'md:h-[480px]', 'leaflet-map-wrap')}>
+              <div className={cn('relative h-[360px] w-full md:h-[420px]', 'leaflet-map-wrap')}>
                 <MapContainer center={center} zoom={zoom} className="h-full w-full" scrollWheelZoom>
                   <MapResize />
                   {highlightLat != null && highlightLng != null && (
@@ -356,125 +423,110 @@ export default function PlacesMap() {
             )}
           </div>
 
-          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-soft dark:border-gray-800 dark:bg-gray-900">
-            <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              <Users className="h-4 w-4" />
-              Places from members
-            </h2>
-
-            <div className="grid gap-6 md:grid-cols-2">
-              <div>
-                <label htmlFor="birth-place-select" className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-300">
-                  <MapPin className="h-4 w-4 text-primary-600 dark:text-primary-400" />
-                  Birth place
-                </label>
-                <select
-                  id="birth-place-select"
-                  value={birthPlaceSelection}
-                  onChange={(e) => setBirthPlaceSelection(e.target.value)}
-                  className={selectClass}
-                >
-                  <option value="">— Select birth place —</option>
-                  {(data.birthPlaces || []).map((row) => (
-                    <option key={row.place} value={row.place}>
-                      {row.place} ({row.member_count} member{row.member_count === 1 ? '' : 's'})
-                    </option>
-                  ))}
-                </select>
-                {(data.birthPlaces || []).length === 0 && !loading && (
-                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">No birth places recorded yet.</p>
-                )}
-                {birthPlaceSelection && (
-                  <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50/80 p-3 dark:border-gray-800 dark:bg-gray-800/40">
-                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                      Members born in {birthPlaceSelection}
-                    </p>
-                    <PlaceMembersList
-                      members={birthMembers}
-                      loading={birthMembersLoading}
-                      emptyMessage="No members found for this birth place."
-                    />
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <label htmlFor="current-place-select" className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-300">
-                  <Home className="h-4 w-4 text-primary-600 dark:text-primary-400" />
-                  Current place
-                </label>
-                <select
-                  id="current-place-select"
-                  value={currentPlaceSelection}
-                  onChange={(e) => setCurrentPlaceSelection(e.target.value)}
-                  className={selectClass}
-                >
-                  <option value="">— Select current place —</option>
-                  {(data.currentPlaces || []).map((row) => (
-                    <option key={row.place} value={row.place}>
-                      {row.place} ({row.member_count} member{row.member_count === 1 ? '' : 's'})
-                    </option>
-                  ))}
-                </select>
-                {(data.currentPlaces || []).length === 0 && !loading && (
-                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">No current places recorded yet.</p>
-                )}
-                {currentPlaceSelection && (
-                  <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50/80 p-3 dark:border-gray-800 dark:bg-gray-800/40">
-                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                      Members living in {currentPlaceSelection}
-                    </p>
-                    <PlaceMembersList
-                      members={currentMembers}
-                      loading={currentMembersLoading}
-                      emptyMessage="No members found for this current place."
-                    />
-                  </div>
-                )}
+          <section className="flex min-h-[420px] flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-soft dark:border-gray-800 dark:bg-gray-900 dark:shadow-soft-dark">
+            <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-5 py-4 dark:border-gray-800">
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-50 text-primary-600 dark:bg-primary-950/50 dark:text-primary-400">
+                  <Users className="h-4 w-4" />
+                </span>
+                <div>
+                  <h2 className="text-base font-semibold text-gray-900 dark:text-white">Places from members</h2>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Birth and current residence from family records
+                  </p>
+                </div>
               </div>
             </div>
-
-            <p className="mt-4 text-xs text-gray-500 dark:text-gray-400">
-              Select a place from either dropdown to view members. Places are collected from family member records.
-            </p>
-          </div>
+            <div className="grid min-h-0 flex-1 gap-4 p-4 md:grid-cols-2 md:p-5">
+              <PlaceFilterPanel
+                icon={MapPin}
+                title="Birth place"
+                hint="Where members were born"
+                selectId="birth-place-select"
+                value={birthPlaceSelection}
+                onChange={(e) => setBirthPlaceSelection(e.target.value)}
+                options={data.birthPlaces || []}
+                emptyOptionsMessage="No birth places recorded yet."
+                membersTitle={`Born in ${birthPlaceSelection}`}
+                members={birthMembers}
+                loading={birthMembersLoading}
+                emptyMembersMessage="No members found for this birth place."
+                accentClass="bg-sky-50/80 dark:bg-sky-950/20"
+              />
+              <PlaceFilterPanel
+                icon={Home}
+                title="Current place"
+                hint="Where members live now"
+                selectId="current-place-select"
+                value={currentPlaceSelection}
+                onChange={(e) => setCurrentPlaceSelection(e.target.value)}
+                options={data.currentPlaces || []}
+                emptyOptionsMessage="No current places recorded yet."
+                membersTitle={`Living in ${currentPlaceSelection}`}
+                members={currentMembers}
+                loading={currentMembersLoading}
+                emptyMembersMessage="No members found for this current place."
+                accentClass="bg-emerald-50/80 dark:bg-emerald-950/20"
+              />
+            </div>
+          </section>
         </div>
 
-        <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-soft dark:border-gray-800 dark:bg-gray-900 lg:sticky lg:top-[4.5rem] lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
-          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-            <MapPin className="h-4 w-4" />
-            Map pins
-          </h2>
-          {(data.pins || []).length === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-gray-400">No pins yet. Add one to see it here and on the map.</p>
-          ) : (
-            <ul className="space-y-2">
-              {(data.pins || []).map((p) => (
-                <li
-                  key={p.id}
-                  className="flex items-start justify-between gap-2 rounded-lg border border-gray-100 px-3 py-2 dark:border-gray-800"
-                >
-                  <div>
-                    <p className="font-medium text-gray-900 dark:text-white">{p.name}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {Number(p.latitude).toFixed(4)}, {Number(p.longitude).toFixed(4)}
-                    </p>
-                  </div>
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(p.id)}
-                      className="rounded p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
-                      aria-label="Delete pin"
+        <aside className="flex min-h-[420px] flex-col lg:min-h-0">
+          <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-soft dark:border-gray-800 dark:bg-gray-900 dark:shadow-soft-dark">
+            <div className="flex items-center justify-between gap-2 border-b border-gray-100 px-5 py-4 dark:border-gray-800">
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400">
+                  <MapPin className="h-4 w-4" />
+                </span>
+                <div>
+                  <h2 className="text-base font-semibold text-gray-900 dark:text-white">Map pins</h2>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Saved locations on the map</p>
+                </div>
+              </div>
+              <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold tabular-nums text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                {(data.pins || []).length}
+              </span>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain p-3">
+              {(data.pins || []).length === 0 ? (
+                <div className="flex h-full min-h-[200px] flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 px-4 py-10 text-center dark:border-gray-700">
+                  <MapPin className="mb-2 h-8 w-8 text-gray-300 dark:text-gray-600" />
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-300">No pins yet</p>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Use &quot;Add map pin&quot; to mark reunions, villages, or landmarks.
+                  </p>
+                </div>
+              ) : (
+                <ul className="space-y-2">
+                  {(data.pins || []).map((p) => (
+                    <li
+                      key={p.id}
+                      className="flex items-start justify-between gap-2 rounded-xl border border-gray-100 bg-gray-50/50 px-3 py-3 transition-colors hover:bg-gray-100/80 dark:border-gray-800 dark:bg-gray-800/40 dark:hover:bg-gray-800/70"
                     >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+                      <div className="min-w-0">
+                        <p className="font-medium text-gray-900 dark:text-white">{p.name}</p>
+                        <p className="mt-0.5 text-xs tabular-nums text-gray-500 dark:text-gray-400">
+                          {Number(p.latitude).toFixed(4)}, {Number(p.longitude).toFixed(4)}
+                        </p>
+                      </div>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(p.id)}
+                          className="shrink-0 rounded-lg p-2 text-red-600 transition-colors hover:bg-red-50 dark:hover:bg-red-950/30"
+                          aria-label={`Delete pin ${p.name}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </aside>
       </div>
     </div>
   );

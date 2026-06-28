@@ -14,7 +14,6 @@ import {
   getUniqueSurnames,
   hasActiveMemberFilters,
 } from '../lib/memberFilters';
-import { isCompactViewport } from '../lib/mobile';
 
 function displayName(m) {
   return [m.name, m.surname].filter(Boolean).join(' ') || m.name || '';
@@ -120,7 +119,7 @@ export default function FamilyMembers() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState('grid');
-  const [filtersOpen, setFiltersOpen] = useState(() => !isCompactViewport());
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [surnameFilter, setSurnameFilter] = useState('');
   const [placeFilter, setPlaceFilter] = useState('');
   const [genderFilter, setGenderFilter] = useState('');
