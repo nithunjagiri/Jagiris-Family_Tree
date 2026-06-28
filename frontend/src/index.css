@@ -104,13 +104,18 @@ html .rd3t-tree-container svg {
 
 @layer components {
   .family-tree-viewport {
-    @apply relative overflow-hidden rounded-xl border border-gray-200/90 bg-slate-50 shadow-sm dark:border-gray-800 dark:bg-gray-950;
+    @apply relative h-full min-h-[280px] w-full overflow-hidden rounded-xl border border-gray-200/90 bg-slate-50 shadow-sm dark:border-gray-800 dark:bg-gray-950;
     background-image: radial-gradient(
       circle at 1px 1px,
       rgb(148 163 184 / 0.22) 1px,
       transparent 0
     );
     background-size: 22px 22px;
+  }
+
+  .family-tree-viewport .rd3t-tree-container,
+  .family-tree-viewport .rd3t-tree-container svg {
+    @apply h-full w-full;
   }
 
   html.dark .family-tree-viewport {
