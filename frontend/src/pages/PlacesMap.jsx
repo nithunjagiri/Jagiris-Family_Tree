@@ -325,7 +325,7 @@ function MapPinsPanel({ pins, selectedPinId, onSelectPin, isAdmin, onDelete, cla
           {pins.length}
         </span>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain p-3">
+      <div className="scroll-touch min-h-0 flex-1 p-3">
         {pins.length === 0 ? (
           <div className="flex h-full min-h-[160px] flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 px-4 py-10 text-center dark:border-gray-700">
             <MapPin className="mb-2 h-8 w-8 text-gray-300 dark:text-gray-600" />
@@ -671,6 +671,7 @@ export default function PlacesMap() {
 
         <div className="lg:hidden">
           <MapPinsPanel
+            className="h-[min(52dvh,480px)]"
             pins={pins}
             selectedPinId={selectedPin?.id}
             onSelectPin={handleSelectPin}

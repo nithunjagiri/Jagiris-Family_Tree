@@ -4,22 +4,30 @@ import { cn } from '../lib/utils';
 
 /**
  * @param {{ label: string; to?: string }[]} items - Last item is the current page (no link).
- * @param {string} [backTo] - Explicit back destination; defaults to browser history.
+ * @param {string} [backTo] - Explicit back destination; omit to use browser history.
  */
 export default function Breadcrumb({ items, backTo, className }) {
   const navigate = useNavigate();
 
   const handleBack = () => {
-    if (backTo) navigate(backTo);
-    else navigate(-1);
+    if (backTo) {
+      navigate(backTo);
+      return;
+    }
+    const idx = typeof window !== 'undefined' ? window.history.state?.idx : undefined;
+    if (typeof idx === 'number' ? idx > 0 : window.history.length > 1) {
+      navigate(-1);
+    } else {
+      navigate('/');
+    }
   };
 
   return (
-    <div className={cn('flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center', className)}>
+    <div className={cn('flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3', className)}>
       <button
         type="button"
         onClick={handleBack}
-        className="inline-flex w-fit touch-manipulation items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary-700 active:bg-primary-800 dark:bg-primary-600 dark:hover:bg-primary-500"
+        className="inline-flex w-fit touch-manipulation items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary-700 active:bg-primary-800 dark:bg-primary-600 dark:hover:bg-primary-500"
       >
         <ArrowLeft className="h-4 w-4" />
         Back

@@ -6,6 +6,7 @@ import { familyTreeApi } from '../services/api';
 import { formatCalendarLong } from '../lib/calendarDate';
 import { resolveBackendPublicUrl } from '../lib/backendOrigin';
 import ModulePageHeader from '../components/ModulePageHeader';
+import { isCompactViewport } from '../lib/mobile';
 
 const NODE_WIDTH = 140;
 /** SVG foreignObject box — tight; overflow visible so extra text is not clipped. */
@@ -40,17 +41,19 @@ function getTreeWidth(node) {
   return maxWidth;
 }
 
-function estimateInitialZoom(containerWidth, containerHeight, treeData) {
-  if (!treeData || containerWidth <= 0 || containerHeight <= 0) return 0.85;
+function estimateInitialZoom(containerWidth, containerHeight, treeData, { mobile = false } = {}) {
+  if (!treeData || containerWidth <= 0 || containerHeight <= 0) return mobile ? 0.55 : 0.85;
   const depth = getTreeDepth(treeData);
   const width = getTreeWidth(treeData);
   const estimatedW = width * NODE_SIZE_X * 1.25;
   const estimatedH = depth * NODE_SIZE_Y * 1.35;
-  const zoom = Math.min(
-    containerWidth / estimatedW,
-    containerHeight / estimatedH,
-    SCALE_EXTENT.max
-  );
+  const zoomW = containerWidth / estimatedW;
+  const zoomH = containerHeight / estimatedH;
+  if (mobile) {
+    const zoom = Math.min(zoomH * 1.08, SCALE_EXTENT.max);
+    return Math.max(zoom, 0.42);
+  }
+  const zoom = Math.min(zoomW, zoomH, SCALE_EXTENT.max);
   return Math.max(Math.min(zoom, SCALE_EXTENT.max), SCALE_EXTENT.min);
 }
 
@@ -219,7 +222,8 @@ export default function FamilyTree() {
       const h = el.offsetHeight;
       setDimensions((prev) => (prev.width === w && prev.height === h ? prev : { width: w, height: h }));
       if (w > 0 && h > 0) {
-        const z = estimateInitialZoom(w, h, treeData);
+        const mobile = isCompactViewport();
+        const z = estimateInitialZoom(w, h, treeData, { mobile });
         const tr = computeFitTranslate(w, h, treeData, z);
         const next = { zoom: z, translate: tr };
         viewRef.current = next;
@@ -250,7 +254,8 @@ export default function FamilyTree() {
 
   const handleFitView = () => {
     if (!treeData || dimensions.width <= 0 || dimensions.height <= 0) return;
-    const z = estimateInitialZoom(dimensions.width, dimensions.height, treeData);
+    const mobile = isCompactViewport();
+    const z = estimateInitialZoom(dimensions.width, dimensions.height, treeData, { mobile });
     const tr = computeFitTranslate(dimensions.width, dimensions.height, treeData, z);
     applyView({ zoom: z, translate: tr });
   };
@@ -286,24 +291,26 @@ export default function FamilyTree() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-5rem)] w-full max-w-none flex-col">
-      <div className="flex flex-shrink-0 flex-col gap-3 border-b border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900 md:px-6">
+    <div className="flex min-h-[72dvh] w-full max-w-none flex-col lg:min-h-[calc(100dvh-var(--app-topbar-total)-2rem)]">
+      <div className="flex shrink-0 flex-col gap-2 border-b border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900 md:px-6">
         <ModulePageHeader
           label="Family Tree"
           description="Click a card to open profile · Drag to pan · Scroll to zoom · Use toolbar to fit or zoom"
+          descriptionClassName="hidden sm:block"
           actions={
             <Link
               to="/family-members/add"
-              className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary-700"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary-700 sm:w-auto"
             >
               <UserPlus className="h-5 w-5" aria-hidden />
               Add New Member
             </Link>
           }
+          actionsClassName="w-full sm:w-auto"
         />
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col px-4 pb-4 pt-3 md:px-6 md:pb-6">
+      <div className="flex min-h-0 flex-1 flex-col px-2 pb-4 pt-3 sm:px-4 md:px-6 md:pb-6">
         {!treeData ? (
           <div className="family-tree-viewport flex min-h-[480px] flex-1 flex-col items-center justify-center gap-4 px-4 text-center text-sm text-gray-500 dark:text-gray-400">
             <p>No family tree data. Add members and set Father / Mother in Edit to build the tree.</p>
@@ -365,7 +372,7 @@ export default function FamilyTree() {
 
             <div
               ref={containerRef}
-              className="family-tree-viewport flex min-h-[480px] flex-1 flex-col"
+              className="family-tree-viewport flex min-h-[420px] flex-1 flex-col sm:min-h-[480px]"
               style={{ width: '100%' }}
             >
               {dimensions.width > 0 ? (

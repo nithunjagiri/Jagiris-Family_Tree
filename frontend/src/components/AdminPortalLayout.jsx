@@ -27,7 +27,7 @@ export default function AdminPortalLayout() {
   return (
     <div className="w-full max-w-none space-y-6">
       <div>
-        <Breadcrumb backTo="/" items={[{ label: 'Home', to: '/' }, { label: pageLabel }]} />
+        <Breadcrumb items={[{ label: 'Home', to: '/' }, { label: pageLabel }]} />
         <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{pageDescription}</p>
       </div>
       <nav className="flex gap-1 border-b border-gray-200 dark:border-gray-700" aria-label="Admin sections">
