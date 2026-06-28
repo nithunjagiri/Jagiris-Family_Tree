@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import { Link, useSearchParams } from 'react-router-dom';
 import L from 'leaflet';
-import { MapPin, Plus, Trash2, Users, ChevronRight, Home, Navigation } from 'lucide-react';
+import { MapPin, Plus, Trash2, Users, ChevronRight, Home, Navigation, X } from 'lucide-react';
 import { placesApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../lib/utils';
@@ -43,17 +43,28 @@ function FlyToLocation({ lat, lng }) {
   return null;
 }
 
+function FlyToPin({ pin }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!pin) return;
+    map.flyTo([Number(pin.latitude), Number(pin.longitude)], 13, { duration: 0.8 });
+  }, [map, pin]);
+  return null;
+}
+
 const selectClass =
   'mobile-input w-full appearance-none rounded-lg border-0 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm ring-1 ring-gray-200 transition-shadow focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-gray-900 dark:text-white dark:ring-gray-700';
 
 /** ~12 member rows visible before scrolling */
 const MEMBER_LIST_MAX_CLASS = 'max-h-[420px]';
 
+const MAP_HEIGHT_CLASS = 'h-[360px] md:h-[480px] lg:h-[520px]';
+
 function displayMemberName(m) {
   return [m.name, m.surname].filter(Boolean).join(' ') || 'Unnamed';
 }
 
-function MapPinPopup({ pin }) {
+function MapPinDetailContent({ pin }) {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -63,9 +74,7 @@ function MapPinPopup({ pin }) {
     Promise.all([placesApi.membersByPlace(pin.name, 'birth'), placesApi.membersByPlace(pin.name, 'residence')])
       .then(([birthRes, residenceRes]) => {
         if (cancelled) return;
-        setMembers(
-          mergeMembersById(birthRes.data?.members, residenceRes.data?.members)
-        );
+        setMembers(mergeMembersById(birthRes.data?.members, residenceRes.data?.members));
       })
       .catch(() => {
         if (!cancelled) setMembers([]);
@@ -81,36 +90,40 @@ function MapPinPopup({ pin }) {
   const directionsUrl = buildGoogleMapsDirectionsUrl(pin.latitude, pin.longitude);
 
   return (
-    <div className="map-pin-popup min-w-[240px] max-w-[min(92vw,300px)]">
-      <p className="text-base font-semibold text-gray-900 dark:text-white">{pin.name}</p>
+    <>
       {pin.notes ? (
-        <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{pin.notes}</p>
+        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{pin.notes}</p>
       ) : null}
-      <p className="mt-0.5 text-xs tabular-nums text-gray-500 dark:text-gray-400">
+      <p className="mt-1 text-xs tabular-nums text-gray-500 dark:text-gray-400">
         {Number(pin.latitude).toFixed(4)}, {Number(pin.longitude).toFixed(4)}
       </p>
 
-      <div className="mt-3 border-t border-gray-100 pt-3 dark:border-gray-700">
+      <div className="mt-4 border-t border-gray-100 pt-4 dark:border-gray-700">
         <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
           Members at this place
         </p>
         {loading ? (
-          <div className="flex justify-center py-4">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
+          <div className="flex justify-center py-6">
+            <div className="h-7 w-7 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
           </div>
         ) : members.length === 0 ? (
-          <p className="text-xs text-gray-500 dark:text-gray-400">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
             No members matched this place name in birth or current place records.
           </p>
         ) : (
-          <ul className={cn('divide-y divide-gray-100 overflow-y-auto overscroll-y-contain dark:divide-gray-700', MEMBER_LIST_MAX_CLASS)}>
+          <ul
+            className={cn(
+              'divide-y divide-gray-100 overflow-y-auto overscroll-y-contain rounded-lg ring-1 ring-gray-200 dark:divide-gray-700 dark:ring-gray-700',
+              MEMBER_LIST_MAX_CLASS
+            )}
+          >
             {members.map((m) => (
               <li key={m.id}>
                 <Link
                   to={`/family-members/${m.id}`}
-                  className="flex items-center gap-2 py-2 pr-1 transition-colors hover:text-primary-600 dark:hover:text-primary-400"
+                  className="flex items-center gap-2 px-2 py-2.5 text-gray-900 transition-colors hover:bg-gray-50 dark:text-gray-100 dark:hover:bg-gray-800/60"
                 >
-                  <Users className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                  <Users className="h-4 w-4 shrink-0 text-gray-400" />
                   <span className="min-w-0 truncate text-sm font-medium">{displayMemberName(m)}</span>
                 </Link>
               </li>
@@ -123,11 +136,61 @@ function MapPinPopup({ pin }) {
         href={directionsUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary-600 px-3 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary-700"
+        className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-3 text-sm font-semibold text-white no-underline shadow-sm transition-colors hover:bg-primary-700 active:bg-primary-800"
       >
-        <Navigation className="h-4 w-4" />
-        Directions
+        <Navigation className="h-4 w-4 shrink-0 text-white" aria-hidden />
+        <span className="text-white">Directions in Google Maps</span>
       </a>
+    </>
+  );
+}
+
+function PinDetailOverlay({ pin, onClose }) {
+  useEffect(() => {
+    if (!pin) return;
+    const onKey = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [pin, onClose]);
+
+  if (!pin) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[2000] flex items-end justify-center sm:items-center sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="pin-detail-title"
+    >
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/55 backdrop-blur-[1px]"
+        aria-label="Close pin details"
+        onClick={onClose}
+      />
+      <div className="relative z-10 flex max-h-[min(88vh,680px)] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900 sm:rounded-2xl">
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-gray-100 px-5 py-4 dark:border-gray-800">
+          <div className="min-w-0">
+            <p id="pin-detail-title" className="truncate text-lg font-semibold text-gray-900 dark:text-white">
+              {pin.name}
+            </p>
+            <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Map pin details</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="shrink-0 rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+            aria-label="Close"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-5 py-4">
+          <MapPinDetailContent pin={pin} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -245,6 +308,77 @@ function PlaceFilterPanel({
   );
 }
 
+function MapPinsPanel({ pins, selectedPinId, onSelectPin, isAdmin, onDelete, className }) {
+  return (
+    <div className={cn('flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-soft dark:border-gray-800 dark:bg-gray-900 dark:shadow-soft-dark', className)}>
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-100 px-5 py-4 dark:border-gray-800">
+        <div className="flex items-center gap-3">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400">
+            <MapPin className="h-4 w-4" />
+          </span>
+          <div>
+            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Map pins</h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Tap a pin to view details</p>
+          </div>
+        </div>
+        <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold tabular-nums text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+          {pins.length}
+        </span>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain p-3">
+        {pins.length === 0 ? (
+          <div className="flex h-full min-h-[160px] flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 px-4 py-10 text-center dark:border-gray-700">
+            <MapPin className="mb-2 h-8 w-8 text-gray-300 dark:text-gray-600" />
+            <p className="text-sm font-medium text-gray-600 dark:text-gray-300">No pins yet</p>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Use &quot;Add map pin&quot; to mark reunions, villages, or landmarks.
+            </p>
+          </div>
+        ) : (
+          <ul className="space-y-2">
+            {pins.map((p) => (
+              <li key={p.id}>
+                <div
+                  className={cn(
+                    'flex items-start justify-between gap-2 rounded-xl border px-3 py-3 transition-colors',
+                    selectedPinId === p.id
+                      ? 'border-primary-400 bg-primary-50/80 dark:border-primary-600 dark:bg-primary-950/30'
+                      : 'border-gray-100 bg-gray-50/50 hover:bg-gray-100/80 dark:border-gray-800 dark:bg-gray-800/40 dark:hover:bg-gray-800/70'
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={() => onSelectPin(p)}
+                    className="min-w-0 flex-1 text-left"
+                  >
+                    <p className="font-medium text-gray-900 dark:text-white">{p.name}</p>
+                    <p className="mt-0.5 text-xs tabular-nums text-gray-500 dark:text-gray-400">
+                      {Number(p.latitude).toFixed(4)}, {Number(p.longitude).toFixed(4)}
+                    </p>
+                  </button>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDelete(p.id);
+                      }}
+                      className="shrink-0 rounded-lg p-2 text-red-600 transition-colors hover:bg-red-50 dark:hover:bg-red-950/30"
+                      aria-label={`Delete pin ${p.name}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function PlacesMap() {
   const { isAdmin } = useAuth();
   const [searchParams] = useSearchParams();
@@ -267,6 +401,7 @@ export default function PlacesMap() {
   const [currentMembers, setCurrentMembers] = useState([]);
   const [birthMembersLoading, setBirthMembersLoading] = useState(false);
   const [currentMembersLoading, setCurrentMembersLoading] = useState(false);
+  const [selectedPin, setSelectedPin] = useState(null);
 
   const load = () => {
     setLoading(true);
@@ -347,6 +482,10 @@ export default function PlacesMap() {
 
   const zoom = highlightLat != null ? 12 : (data.pins || []).length === 0 ? 2 : Math.min(12, 4 + Math.floor(data.pins.length / 2));
 
+  const handleSelectPin = (pin) => {
+    setSelectedPin(pin);
+  };
+
   const handleAddPin = async (e) => {
     e.preventDefault();
     setFormError('');
@@ -375,11 +514,14 @@ export default function PlacesMap() {
     if (!window.confirm('Remove this map pin?')) return;
     try {
       await placesApi.remove(id);
+      if (selectedPin?.id === id) setSelectedPin(null);
       load();
     } catch (err) {
       alert(getApiErrorMessage(err, 'Delete failed'));
     }
   };
+
+  const pins = data.pins || [];
 
   return (
     <div className="space-y-6">
@@ -472,50 +614,72 @@ export default function PlacesMap() {
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-3 lg:grid-rows-[auto_auto]">
-        <div className="overflow-hidden rounded-2xl border border-gray-200/80 shadow-soft dark:border-gray-800 lg:col-span-2">
+      <div className="grid gap-6 lg:grid-cols-3 lg:items-stretch">
+        <div className={cn('overflow-hidden rounded-2xl border border-gray-200/80 shadow-soft dark:border-gray-800 lg:col-span-2', MAP_HEIGHT_CLASS)}>
           {loading ? (
-            <div className="flex h-[360px] items-center justify-center bg-gray-100 dark:bg-gray-900 md:h-[420px]">
+            <div className="flex h-full items-center justify-center bg-gray-100 dark:bg-gray-900">
               <div className="h-9 w-9 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
             </div>
           ) : (
-            <div className={cn('relative h-[360px] w-full md:h-[420px]', 'leaflet-map-wrap')}>
+            <div className={cn('relative h-full w-full', 'leaflet-map-wrap')}>
               <MapContainer center={center} zoom={zoom} className="h-full w-full" scrollWheelZoom>
                 <MapResize />
                 {highlightLat != null && highlightLng != null && (
                   <FlyToLocation lat={highlightLat} lng={highlightLng} />
                 )}
+                <FlyToPin pin={selectedPin} />
                 <TileLayer
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
                 {highlightLat != null && highlightLng != null && (
-                  <Marker position={[highlightLat, highlightLng]}>
-                    <Popup maxWidth={320} minWidth={240}>
-                      <MapPinPopup
-                        pin={{
+                  <Marker
+                    position={[highlightLat, highlightLng]}
+                    eventHandlers={{
+                      click: () =>
+                        handleSelectPin({
+                          id: 'highlight',
                           name: highlightName || 'Selected location',
                           latitude: highlightLat,
                           longitude: highlightLng,
                           notes: null,
-                        }}
-                      />
-                    </Popup>
-                  </Marker>
+                        }),
+                    }}
+                  />
                 )}
-                {(data.pins || []).map((p) => (
-                  <Marker key={p.id} position={[Number(p.latitude), Number(p.longitude)]}>
-                    <Popup maxWidth={320} minWidth={240}>
-                      <MapPinPopup pin={p} />
-                    </Popup>
-                  </Marker>
+                {pins.map((p) => (
+                  <Marker
+                    key={p.id}
+                    position={[Number(p.latitude), Number(p.longitude)]}
+                    eventHandlers={{ click: () => handleSelectPin(p) }}
+                  />
                 ))}
               </MapContainer>
             </div>
           )}
         </div>
 
-        <section className="flex min-h-[480px] flex-col overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-soft dark:border-gray-800 dark:bg-gray-900 dark:shadow-soft-dark lg:col-span-2 lg:row-start-2">
+        <aside className={cn('hidden lg:flex lg:flex-col', MAP_HEIGHT_CLASS)}>
+          <MapPinsPanel
+            pins={pins}
+            selectedPinId={selectedPin?.id}
+            onSelectPin={handleSelectPin}
+            isAdmin={isAdmin}
+            onDelete={handleDelete}
+          />
+        </aside>
+
+        <div className="lg:hidden">
+          <MapPinsPanel
+            pins={pins}
+            selectedPinId={selectedPin?.id}
+            onSelectPin={handleSelectPin}
+            isAdmin={isAdmin}
+            onDelete={handleDelete}
+          />
+        </div>
+
+        <section className="flex min-h-[480px] flex-col overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-soft dark:border-gray-800 dark:bg-gray-900 dark:shadow-soft-dark lg:col-span-3">
           <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-5 py-4 dark:border-gray-800">
             <div className="flex items-center gap-3">
               <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-50 text-primary-600 dark:bg-primary-950/50 dark:text-primary-400">
@@ -562,63 +726,9 @@ export default function PlacesMap() {
             />
           </div>
         </section>
-
-        <aside className="flex min-h-[480px] flex-col lg:col-start-3 lg:row-start-2">
-          <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-soft dark:border-gray-800 dark:bg-gray-900 dark:shadow-soft-dark">
-            <div className="flex items-center justify-between gap-2 border-b border-gray-100 px-5 py-4 dark:border-gray-800">
-              <div className="flex items-center gap-3">
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400">
-                  <MapPin className="h-4 w-4" />
-                </span>
-                <div>
-                  <h2 className="text-base font-semibold text-gray-900 dark:text-white">Map pins</h2>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Saved locations on the map</p>
-                </div>
-              </div>
-              <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold tabular-nums text-gray-700 dark:bg-gray-800 dark:text-gray-300">
-                {(data.pins || []).length}
-              </span>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain p-3">
-              {(data.pins || []).length === 0 ? (
-                <div className="flex h-full min-h-[200px] flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 px-4 py-10 text-center dark:border-gray-700">
-                  <MapPin className="mb-2 h-8 w-8 text-gray-300 dark:text-gray-600" />
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-300">No pins yet</p>
-                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    Use &quot;Add map pin&quot; to mark reunions, villages, or landmarks.
-                  </p>
-                </div>
-              ) : (
-                <ul className="space-y-2">
-                  {(data.pins || []).map((p) => (
-                    <li
-                      key={p.id}
-                      className="flex items-start justify-between gap-2 rounded-xl border border-gray-100 bg-gray-50/50 px-3 py-3 transition-colors hover:bg-gray-100/80 dark:border-gray-800 dark:bg-gray-800/40 dark:hover:bg-gray-800/70"
-                    >
-                      <div className="min-w-0">
-                        <p className="font-medium text-gray-900 dark:text-white">{p.name}</p>
-                        <p className="mt-0.5 text-xs tabular-nums text-gray-500 dark:text-gray-400">
-                          {Number(p.latitude).toFixed(4)}, {Number(p.longitude).toFixed(4)}
-                        </p>
-                      </div>
-                      {isAdmin && (
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(p.id)}
-                          className="shrink-0 rounded-lg p-2 text-red-600 transition-colors hover:bg-red-50 dark:hover:bg-red-950/30"
-                          aria-label={`Delete pin ${p.name}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        </aside>
       </div>
+
+      <PinDetailOverlay pin={selectedPin} onClose={() => setSelectedPin(null)} />
     </div>
   );
 }
