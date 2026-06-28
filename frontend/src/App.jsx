@@ -28,6 +28,8 @@ import AdminUserEdit from './pages/AdminUserEdit';
 import AdminUserCreate from './pages/AdminUserCreate';
 import AdminPortalLayout from './components/AdminPortalLayout';
 import AdminAnnouncements from './pages/AdminAnnouncements';
+import Reports from './pages/Reports';
+import ReportDetail from './pages/ReportDetail';
 
 function PrivateRoute({ children }) {
   const { isAuth, loading } = useAuth();
@@ -85,11 +87,22 @@ function useAndroidBackButton() {
   }, [navigate, location.pathname]);
 }
 
+function CaseInsensitiveRedirect() {
+  const location = useLocation();
+  const normalized = location.pathname.toLowerCase();
+  if (location.pathname !== normalized) {
+    return <Navigate to={`${normalized}${location.search}${location.hash}`} replace />;
+  }
+  return null;
+}
+
 export default function App() {
   useAndroidBackButton();
 
   return (
-    <Routes>
+    <>
+      <CaseInsensitiveRedirect />
+      <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -121,6 +134,8 @@ export default function App() {
         <Route path="family-members/add" element={<AddMemberForm />} />
         <Route path="family-members/edit/:id" element={<AddMemberForm />} />
         <Route path="family-members/:id" element={<MemberProfile />} />
+        <Route path="reports" element={<Reports />} />
+        <Route path="reports/:slug" element={<ReportDetail />} />
         <Route path="gallery" element={<PhotoGallery />} />
         <Route path="gallery/upload" element={<UploadPhotoForm />} />
         <Route path="events" element={<Events />} />
@@ -147,5 +162,6 @@ export default function App() {
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   );
 }

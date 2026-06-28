@@ -57,6 +57,43 @@ async function saveToDocuments(base64, filename) {
   return { savedTo: 'Documents', path: filename };
 }
 
+async function saveBlobToDevice(blob, filename) {
+  const base64 = await blobToBase64(blob);
+
+  if (Capacitor.getPlatform() === 'android') {
+    try {
+      return await saveToAndroidDownloads(base64, filename);
+    } catch {
+      return saveToDocuments(base64, filename);
+    }
+  }
+
+  return saveToDocuments(base64, filename);
+}
+
+/**
+ * Save CSV/text exports on web or to device Downloads/Documents on mobile.
+ * @param {Blob} blob
+ * @param {string} filename
+ */
+export async function downloadCsvFile(blob, filename) {
+  if (Capacitor.isNativePlatform()) {
+    return saveBlobToDevice(blob, filename);
+  }
+
+  const url = window.URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.style.display = 'none';
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  setTimeout(() => {
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(anchor);
+  }, 200);
+}
+
 /**
  * Save a blob as a downloadable file on web, or directly to device storage on mobile.
  * @param {Blob} blob
@@ -67,17 +104,7 @@ export async function downloadBlobFile(blob, filename) {
   const validBlob = await assertValidSpreadsheetBlob(blob);
 
   if (Capacitor.isNativePlatform()) {
-    const base64 = await blobToBase64(validBlob);
-
-    if (Capacitor.getPlatform() === 'android') {
-      try {
-        return await saveToAndroidDownloads(base64, filename);
-      } catch {
-        return saveToDocuments(base64, filename);
-      }
-    }
-
-    return saveToDocuments(base64, filename);
+    return saveBlobToDevice(validBlob, filename);
   }
 
   const url = window.URL.createObjectURL(validBlob);

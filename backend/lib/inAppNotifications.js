@@ -16,13 +16,20 @@ async function notifyFamilyUsers({
   linkPath,
   actorUserId,
   referenceKey,
+  /** When true, the user who triggered the action also receives the in-app notification. */
+  includeActor = false,
 }) {
   if (!familyId || !type || !title) return;
 
-  const userIds = await getFamilyRecipientUserIds(familyId, {
+  let userIds = await getFamilyRecipientUserIds(familyId, {
     targetAudience,
-    excludeUserId,
+    excludeUserId: includeActor ? null : excludeUserId,
   });
+
+  // Solo-family fallback: still notify the actor when they would otherwise see an empty feed.
+  if (userIds.length === 0 && excludeUserId) {
+    userIds = [excludeUserId];
+  }
 
   if (userIds.length === 0) return;
 

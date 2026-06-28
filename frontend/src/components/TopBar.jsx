@@ -39,7 +39,7 @@ export default function TopBar({ onMenuClick }) {
   };
 
   return (
-    <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b border-gray-200 bg-white px-4 shadow-sm dark:border-gray-800 dark:bg-gray-900 md:px-6">
+    <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b border-gray-200 bg-white px-4 pt-safe shadow-sm dark:border-gray-800 dark:bg-gray-900 md:px-6">
       <button
         type="button"
         onClick={onMenuClick}

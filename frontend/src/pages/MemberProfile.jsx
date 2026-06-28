@@ -192,7 +192,7 @@ export default function MemberProfile() {
             <Field icon={MessageCircle} label="WhatsApp number" value={member.whatsapp_number} />
             <Field icon={Mail} label="Email" value={member.email} />
             <Field icon={MapPin} label="Birth place" value={birthPlace} />
-            <Field icon={MapPin} label="Current city" value={currentCity} />
+            <Field icon={MapPin} label="Current Place" value={currentCity} />
             <Field icon={Briefcase} label="Occupation" value={member.occupation} />
             <Field icon={Briefcase} label="Educational qualification" value={member.educational_qualification} />
             <Field icon={User} label="Marital status" value={member.marital_status} />

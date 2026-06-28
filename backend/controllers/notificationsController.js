@@ -4,6 +4,7 @@ const { sendToUsers } = require('../lib/fcmSender');
 const { scheduleInAppNotification } = require('../lib/inAppNotifications');
 const { getFamilyRecipientUserIds } = require('../lib/notificationRecipients');
 const { ensureAnnouncementsSchema } = require('../database/ensureAnnouncementsSchema');
+const { ensurePlacesAuditSchema } = require('../database/ensurePlacesAuditSchema');
 const { body, validationResult } = require('express-validator');
 
 async function ensureAnnouncementsAndRetry(err, retryFn) {
@@ -115,6 +116,7 @@ exports.createAnnouncement = async (req, res, next) => {
     scheduleInAppNotification({
       familyId,
       excludeUserId: req.user.id,
+      includeActor: true,
       targetAudience,
       type: 'announcement',
       title: `Announcement: ${title}`,
@@ -208,7 +210,7 @@ exports.deleteAnnouncement = async (req, res, next) => {
 // ── In-app notification feed (header bell) ──
 
 exports.listFeed = async (req, res, next) => {
-  try {
+  const run = async () => {
     const familyId = req.familyId;
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 30, 1), 100);
 
@@ -228,11 +230,24 @@ exports.listFeed = async (req, res, next) => {
       [req.user.id, familyId, limit]
     );
 
-    res.json({
+    return {
       items: itemsResult.rows,
       unreadCount: unreadResult.rows[0]?.c ?? 0,
-    });
+    };
+  };
+
+  try {
+    res.json(await run());
   } catch (err) {
+    if (err.code === '42P01') {
+      try {
+        await ensurePlacesAuditSchema();
+        res.json(await run());
+        return;
+      } catch (err2) {
+        return next(err2);
+      }
+    }
     next(err);
   }
 };

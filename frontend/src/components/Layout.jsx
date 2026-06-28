@@ -9,10 +9,10 @@ export default function Layout() {
   const isFamilyTree = pathname.includes('family-tree');
   const isDashboard = pathname === '/';
   const mainClass = isFamilyTree
-    ? 'min-w-0 flex-1 min-h-0 overflow-auto py-4 md:py-6'
+    ? 'min-w-0 flex-1 min-h-0 overflow-y-auto overscroll-y-contain py-4 md:py-6 pb-safe'
     : isDashboard
-      ? 'min-w-0 flex-1 p-4 md:p-6 lg:p-8'
-      : 'min-w-0 flex-1 p-4 md:p-6';
+      ? 'min-w-0 flex-1 min-h-0 overflow-y-auto overscroll-y-contain p-4 md:p-6 lg:p-8 pb-safe'
+      : 'min-w-0 flex-1 min-h-0 overflow-y-auto overscroll-y-contain p-4 md:p-6 pb-safe';
 
   return (
     <div className="flex min-h-screen flex-col bg-gray-50 dark:bg-gray-950">

@@ -27,6 +27,19 @@ exports.list = async (req, res, next) => {
       ,
       [familyId]
     );
+    const fromResidence = await db.query(
+      `SELECT place, COUNT(*)::int AS member_count
+       FROM (
+         SELECT COALESCE(NULLIF(TRIM(rp.name), ''), NULLIF(TRIM(fm.residence_place), '')) AS place
+         FROM family_members fm
+         LEFT JOIN places rp ON rp.id = fm.residence_place_id AND rp.family_id = fm.family_id
+         WHERE fm.family_id = $1
+       ) x
+       WHERE place IS NOT NULL
+       GROUP BY place
+       ORDER BY member_count DESC, place ASC`,
+      [familyId]
+    );
     let pins = { rows: [] };
     try {
       pins = await db.query(
@@ -48,6 +61,7 @@ exports.list = async (req, res, next) => {
     }
     res.json({
       birthPlaces: fromMembers.rows,
+      currentPlaces: fromResidence.rows,
       pins: pins.rows || [],
     });
   } catch (err) {
@@ -126,21 +140,36 @@ exports.membersByPlace = async (req, res, next) => {
   try {
     const place = (req.query.place || '').trim();
     if (!place) return res.status(400).json({ error: 'place query parameter required' });
+    const type = String(req.query.type || 'birth').trim().toLowerCase();
+    const isResidence = type === 'residence' || type === 'current';
 
-    const result = await db.query(
-      `SELECT fm.id, fm.name, fm.surname, fm.date_of_birth, fm.gender, fm.phone, fm.profile_photo
-       FROM family_members fm
-       LEFT JOIN places p ON p.id = fm.birth_place_id AND p.family_id = fm.family_id
-       WHERE fm.family_id = $1
-         AND (
-           LOWER(TRIM(COALESCE(p.name, ''))) = LOWER($2)
-           OR LOWER(TRIM(COALESCE(fm.birth_place, ''))) = LOWER($2)
-         )
-       ORDER BY fm.name ASC, fm.surname ASC`,
-      [req.familyId, place.toLowerCase()]
-    );
+    const result = isResidence
+      ? await db.query(
+          `SELECT fm.id, fm.name, fm.surname, fm.date_of_birth, fm.gender, fm.phone, fm.profile_photo
+           FROM family_members fm
+           LEFT JOIN places rp ON rp.id = fm.residence_place_id AND rp.family_id = fm.family_id
+           WHERE fm.family_id = $1
+             AND (
+               LOWER(TRIM(COALESCE(rp.name, ''))) = LOWER($2)
+               OR LOWER(TRIM(COALESCE(fm.residence_place, ''))) = LOWER($2)
+             )
+           ORDER BY fm.name ASC, fm.surname ASC`,
+          [req.familyId, place.toLowerCase()]
+        )
+      : await db.query(
+          `SELECT fm.id, fm.name, fm.surname, fm.date_of_birth, fm.gender, fm.phone, fm.profile_photo
+           FROM family_members fm
+           LEFT JOIN places p ON p.id = fm.birth_place_id AND p.family_id = fm.family_id
+           WHERE fm.family_id = $1
+             AND (
+               LOWER(TRIM(COALESCE(p.name, ''))) = LOWER($2)
+               OR LOWER(TRIM(COALESCE(fm.birth_place, ''))) = LOWER($2)
+             )
+           ORDER BY fm.name ASC, fm.surname ASC`,
+          [req.familyId, place.toLowerCase()]
+        );
 
-    res.json({ place, members: result.rows });
+    res.json({ place, type: isResidence ? 'residence' : 'birth', members: result.rows });
   } catch (err) {
     next(err);
   }

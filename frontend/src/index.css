@@ -6,6 +6,29 @@
   body {
     @apply bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100 antialiased;
   }
+
+  html.native-app body {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+@layer utilities {
+  .pb-safe {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+  }
+
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  /* 16px+ inputs avoid iOS zoom-on-focus */
+  .mobile-input {
+    @apply max-sm:min-h-[44px] max-sm:text-base;
+  }
+
+  .touch-manipulation {
+    touch-action: manipulation;
+  }
 }
 
 @keyframes spin {

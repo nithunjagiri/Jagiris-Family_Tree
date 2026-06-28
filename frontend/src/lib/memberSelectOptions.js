@@ -1,3 +1,5 @@
+import { getMemberAge } from './reportsAnalytics';
+
 function baseLabel(m) {
   const parts = [m.name, m.surname].filter(Boolean);
   const joined = parts.join(' ').trim();
@@ -16,12 +18,40 @@ function birthYear(m) {
   return Number.isFinite(y) ? y : null;
 }
 
+/** @param {Record<string, unknown>} m */
+function isAdultOrNoDob(m) {
+  const age = getMemberAge(m);
+  return age == null || age >= 18;
+}
+
+/**
+ * @param {Record<string, unknown>} m
+ * @param {'father' | 'mother' | 'spouse'} role
+ * @param {string} [memberGender]
+ */
+function memberPassesRole(m, role, memberGender) {
+  const g = String(m.gender || '').trim();
+  if (role === 'father') return g === 'Male' && isAdultOrNoDob(m);
+  if (role === 'mother') return g === 'Female' && isAdultOrNoDob(m);
+  if (role === 'spouse') {
+    if (memberGender === 'Male') return g === 'Female';
+    if (memberGender === 'Female') return g === 'Male';
+    return false;
+  }
+  return true;
+}
+
 /**
  * Labels for Father/Mother/Spouse selects. When several members share the same display name,
  * append birth place when available; otherwise birth year or member id. If labels still
  * collide (e.g. same name and birthplace), append ` · #id`.
  * @param {Array<Record<string, unknown>>} members
- * @param {{ excludeId?: number | null }} [opts]
+ * @param {{
+ *   excludeId?: number | null;
+ *   role?: 'father' | 'mother' | 'spouse';
+ *   memberGender?: string;
+ *   preserveIds?: Array<string | number>;
+ * }} [opts]
  * @returns {{ value: string; label: string }[]}
  */
 export function buildMemberLinkOptions(members, opts = {}) {
@@ -29,14 +59,27 @@ export function buildMemberLinkOptions(members, opts = {}) {
   const excludeId =
     rawEx != null && rawEx !== '' && Number.isFinite(Number(rawEx)) ? Number(rawEx) : null;
   const list = Array.isArray(members) ? members : [];
+  const { role, memberGender } = opts;
+  const preserveSet = new Set(
+    (opts.preserveIds || [])
+      .filter((id) => id != null && id !== '')
+      .map((id) => String(id))
+  );
+
+  let eligible = list;
+  if (role) {
+    eligible = list.filter(
+      (m) => preserveSet.has(String(m.id)) || memberPassesRole(m, role, memberGender)
+    );
+  }
 
   const counts = new Map();
-  for (const m of list) {
+  for (const m of eligible) {
     const k = nameKey(m);
     counts.set(k, (counts.get(k) || 0) + 1);
   }
 
-  let out = list.map((m) => {
+  let out = eligible.map((m) => {
     const value = String(m.id);
     const k = nameKey(m);
     let label = baseLabel(m);

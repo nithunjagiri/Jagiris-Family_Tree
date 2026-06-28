@@ -230,6 +230,7 @@ exports.create = async (req, res, next) => {
     scheduleInAppNotification({
       familyId,
       excludeUserId: req.user?.id,
+      includeActor: true,
       type: 'member_added',
       title: `New member: ${displayName}`,
       body: deceasedOnCreate
@@ -239,6 +240,7 @@ exports.create = async (req, res, next) => {
       entityId: memberId,
       linkPath: `/family-members/${memberId}`,
       actorUserId: req.user?.id,
+      referenceKey: `member_added-${memberId}`,
     });
     res.status(201).json(row);
   } catch (err) {
@@ -335,6 +337,7 @@ exports.update = async (req, res, next) => {
       scheduleInAppNotification({
         familyId,
         excludeUserId: req.user?.id,
+        includeActor: true,
         type: 'member_deceased',
         title: `${displayName} has passed away`,
         body: `${displayName} was marked as deceased in the family tree.`,
@@ -342,6 +345,7 @@ exports.update = async (req, res, next) => {
         entityId: memberId,
         linkPath: `/family-members/${memberId}`,
         actorUserId: req.user?.id,
+        referenceKey: `member_deceased-${memberId}`,
       });
     }
     const row = await selectMemberById(db, req.params.id, familyId);

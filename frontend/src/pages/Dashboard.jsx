@@ -13,6 +13,7 @@ import {
   Phone,
   MessageCircle,
   Megaphone,
+  ChevronDown,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -707,18 +708,7 @@ export default function Dashboard() {
               {isAdmin ? ' Use “Post announcement” to share news with your family.' : ''}
             </li>
           ) : (
-            announcements.map((a) => (
-              <li key={a.id} className="px-5 py-4">
-                <p className="font-medium text-gray-900 dark:text-white">{a.title}</p>
-                {a.body && (
-                  <p className="mt-1 line-clamp-3 text-sm text-gray-600 dark:text-gray-300">{a.body}</p>
-                )}
-                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                  {a.created_by_username && `by ${a.created_by_username} · `}
-                  {a.created_at ? new Date(a.created_at).toLocaleString() : ''}
-                </p>
-              </li>
-            ))
+            announcements.map((a) => <AnnouncementItem key={a.id} announcement={a} />)
           )}
         </ul>
       </section>
@@ -731,6 +721,65 @@ export default function Dashboard() {
         />
       )}
     </div>
+  );
+}
+
+function AnnouncementItem({ announcement: a }) {
+  const [expanded, setExpanded] = useState(false);
+  const body = a.body?.trim() || '';
+  const isLong = body.length > 140 || body.includes('\n');
+
+  return (
+    <li className="px-5 py-4">
+      <div
+        role={isLong ? 'button' : undefined}
+        tabIndex={isLong ? 0 : undefined}
+        onClick={isLong ? () => setExpanded((v) => !v) : undefined}
+        onKeyDown={
+          isLong
+            ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setExpanded((v) => !v);
+                }
+              }
+            : undefined
+        }
+        className={cn(isLong && 'touch-manipulation cursor-pointer rounded-lg -mx-2 px-2 py-2 active:bg-gray-100 dark:active:bg-gray-800/60 sm:py-1 sm:hover:bg-gray-50 dark:sm:hover:bg-gray-800/50')}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <p className="font-medium text-gray-900 dark:text-white">{a.title}</p>
+          {isLong && (
+            <ChevronDown
+              className={cn(
+                'mt-0.5 h-4 w-4 shrink-0 text-gray-400 transition-transform',
+                expanded && 'rotate-180'
+              )}
+              aria-hidden
+            />
+          )}
+        </div>
+        {body && (
+          <p
+            className={cn(
+              'mt-1 text-sm text-gray-600 dark:text-gray-300',
+              expanded ? 'whitespace-pre-wrap' : isLong && 'line-clamp-3'
+            )}
+          >
+            {body}
+          </p>
+        )}
+        {isLong && (
+          <p className="mt-1.5 text-xs font-medium text-primary-600 dark:text-primary-400">
+            {expanded ? 'Show less' : 'Tap to read full message'}
+          </p>
+        )}
+        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+          {a.created_by_username && `by ${a.created_by_username} · `}
+          {a.created_at ? new Date(a.created_at).toLocaleString() : ''}
+        </p>
+      </div>
+    </li>
   );
 }
 

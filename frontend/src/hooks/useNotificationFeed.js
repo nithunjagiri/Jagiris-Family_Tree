@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { App as CapApp } from '@capacitor/app';
 import { notificationsApi } from '../services/api';
 
-const POLL_MS = 60_000;
+const POLL_MS = 30_000;
 
 export function useNotificationFeed(enabled = true) {
   const [items, setItems] = useState([]);
@@ -37,9 +39,16 @@ export function useNotificationFeed(enabled = true) {
     const interval = setInterval(refresh, POLL_MS);
     const onFocus = () => refresh();
     window.addEventListener('focus', onFocus);
+    let resumeListener;
+    if (Capacitor.isNativePlatform()) {
+      resumeListener = CapApp.addListener('appStateChange', ({ isActive }) => {
+        if (isActive) refresh();
+      });
+    }
     return () => {
       clearInterval(interval);
       window.removeEventListener('focus', onFocus);
+      if (resumeListener) resumeListener.then((l) => l.remove());
     };
   }, [enabled, refresh]);
 

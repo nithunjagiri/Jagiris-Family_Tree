@@ -168,7 +168,8 @@ export const familyTreeApi = {
 
 export const placesApi = {
   list: () => api.get('/places'),
-  membersByPlace: (place) => api.get('/places/members-by-place', { params: { place } }),
+  membersByPlace: (place, type = 'birth') =>
+    api.get('/places/members-by-place', { params: { place, type } }),
   create: (data) => api.post('/places', data),
   remove: (id) => api.delete(`/places/${id}`),
 };

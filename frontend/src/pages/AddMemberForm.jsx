@@ -437,14 +437,43 @@ export default function AddMemberForm() {
     void runSaveAfterDuplicateCheck(true);
   };
 
-  const memberOptions = useMemo(
-    () =>
-      buildMemberLinkOptions(members, {
-        excludeId: isEdit && id != null && id !== '' ? Number(id) : null,
-      }),
+  const memberOptionsBase = useMemo(
+    () => ({
+      excludeId: isEdit && id != null && id !== '' ? Number(id) : null,
+    }),
     [members, isEdit, id]
   );
-  const toNum = (v) => (v === '' ? null : v);
+
+  const fatherOptions = useMemo(
+    () =>
+      buildMemberLinkOptions(members, {
+        ...memberOptionsBase,
+        role: 'father',
+        preserveIds: [father_id].filter((v) => v != null && v !== ''),
+      }),
+    [members, memberOptionsBase, father_id]
+  );
+
+  const motherOptions = useMemo(
+    () =>
+      buildMemberLinkOptions(members, {
+        ...memberOptionsBase,
+        role: 'mother',
+        preserveIds: [mother_id].filter((v) => v != null && v !== ''),
+      }),
+    [members, memberOptionsBase, mother_id]
+  );
+
+  const spouseOptions = useMemo(
+    () =>
+      buildMemberLinkOptions(members, {
+        ...memberOptionsBase,
+        role: 'spouse',
+        memberGender: gender,
+        preserveIds: [spouse_id].filter((v) => v != null && v !== ''),
+      }),
+    [members, memberOptionsBase, gender, spouse_id]
+  );
 
   if (fetching) {
     return (
@@ -646,7 +675,7 @@ export default function AddMemberForm() {
               )}
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Current city</label>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Current Place</label>
               <select
                 value={currentCityChoice}
                 onChange={(e) => {
@@ -672,7 +701,7 @@ export default function AddMemberForm() {
                   value={residence_place}
                   onChange={(e) => setResidencePlace(e.target.value)}
                   className={cn(inputClass, 'mt-2')}
-                  placeholder="Enter current city"
+                  placeholder="Enter current place"
                 />
               )}
             </div>
@@ -735,7 +764,7 @@ export default function AddMemberForm() {
               <SearchableSelect
                 value={father_id}
                 onChange={setFatherId}
-                options={memberOptions.filter((o) => toNum(o.value) !== toNum(id))}
+                options={fatherOptions}
                 placeholder="— None —"
               />
             </div>
@@ -744,7 +773,7 @@ export default function AddMemberForm() {
               <SearchableSelect
                 value={mother_id}
                 onChange={setMotherId}
-                options={memberOptions.filter((o) => toNum(o.value) !== toNum(id))}
+                options={motherOptions}
                 placeholder="— None —"
               />
             </div>
@@ -753,8 +782,8 @@ export default function AddMemberForm() {
               <SearchableSelect
                 value={spouse_id}
                 onChange={setSpouseId}
-                options={memberOptions.filter((o) => toNum(o.value) !== toNum(id))}
-                placeholder="— None —"
+                options={spouseOptions}
+                placeholder={gender ? '— None —' : 'Select gender first'}
               />
             </div>
           </div>

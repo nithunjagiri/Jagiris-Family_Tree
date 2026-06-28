@@ -74,6 +74,7 @@ exports.add = async (req, res, next) => {
     scheduleInAppNotification({
       familyId: req.familyId,
       excludeUserId: req.user?.id,
+      includeActor: true,
       type: 'event_added',
       title: `New event: ${title}`,
       body: description || `A new family event was added for ${event_date}.`,
@@ -81,6 +82,7 @@ exports.add = async (req, res, next) => {
       entityId: row.id,
       linkPath: '/events',
       actorUserId: req.user?.id,
+      referenceKey: `event_added-${row.id}`,
     });
 
     setImmediate(async () => {
