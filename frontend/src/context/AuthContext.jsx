@@ -7,6 +7,7 @@ import {
   teardownPushNotifications,
 } from '../lib/pushNotifications';
 import { navigateFromPushNotification } from '../lib/pushNavigation';
+import { requestNotificationFeedRefresh } from '../hooks/useNotificationFeed';
 
 const AuthContext = createContext(null);
 

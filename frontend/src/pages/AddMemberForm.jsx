@@ -23,6 +23,8 @@ import {
 } from '../lib/imageProcessing';
 import ImageCropModal from '../components/ImageCropModal';
 import { resolveBackendPublicUrl } from '../lib/backendOrigin';
+import { getNavigationOriginPath } from '../lib/navigationOrigin';
+import { useAppBackNavigation } from '../hooks/useAppBackNavigation';
 
 const PROFILE_MAX_SIZE_BYTES = 5 * 1024 * 1024;
 const PROFILE_MAX_SIZE_LABEL = '5 MB';
@@ -77,6 +79,7 @@ function livingFromMember(m) {
 
 export default function AddMemberForm() {
   const navigate = useNavigate();
+  const handleBack = useAppBackNavigation();
   const location = useLocation();
   const { id } = useParams();
   const isEdit = !!id;
@@ -322,14 +325,16 @@ export default function AddMemberForm() {
       }
     }
     const display = [name, surname].filter(Boolean).join(' ').trim() || String(name || '').trim() || 'Member';
+    const returnTo = getNavigationOriginPath() || state.returnTo || null;
     navigate('/family-members', {
       state: {
         memberSavedMessage: isEdit
           ? `Saved changes for ${display}.`
           : `${display} was added to your family list.`,
+        ...(returnTo ? { returnTo } : {}),
       },
     });
-  }, [buildPayload, isAlive, isEdit, id, profileFile, state.childId, state.childGender, navigate, name, surname]);
+  }, [buildPayload, isAlive, isEdit, id, profileFile, state.childId, state.childGender, state.returnTo, navigate, name, surname]);
 
   const runSaveAfterDuplicateCheck = useCallback(
     async (skipDuplicateCheck) => {
@@ -491,8 +496,8 @@ export default function AddMemberForm() {
         </h1>
         <button
           type="button"
-          onClick={() => navigate('/family-members')}
-          className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+          onClick={handleBack}
+          className="inline-flex touch-manipulation items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
         >
           <ArrowLeft className="h-4 w-4" />
           Cancel

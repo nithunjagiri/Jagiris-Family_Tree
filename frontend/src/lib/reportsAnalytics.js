@@ -63,6 +63,85 @@ function ageInRange(m, min, max, todayYmd) {
   return true;
 }
 
+/**
+ * @typedef {{ min: number; max: number | null; label: string }} AgeChartBucket
+ */
+
+/** @param {number} start @param {number} end */
+function fiveYearBucketsInRange(start, end) {
+  /** @type {AgeChartBucket[]} */
+  const buckets = [];
+  for (let s = start; s <= end; s += 5) {
+    const e = Math.min(s + 4, end);
+    buckets.push({ min: s, max: e, label: `${s}–${e}` });
+  }
+  return buckets;
+}
+
+/** @param {number} start @param {number} end @param {string} openLabel */
+function fiveYearBucketsWithOpenTail(start, end, openLabel) {
+  return [...fiveYearBucketsInRange(start, end), { min: end + 1, max: null, label: openLabel }];
+}
+
+/** Living-member demographics: 5-year bands from birth through 80+, open tail at 81+. */
+const DEFAULT_AGE_CHART_BUCKETS = fiveYearBucketsWithOpenTail(0, 80, '81+');
+
+/** Under-18 report: four bands aligned to childhood / teen stages. */
+const UNDER_18_AGE_CHART_BUCKETS = [
+  { min: 0, max: 5, label: '0–5' },
+  { min: 6, max: 10, label: '6–10' },
+  { min: 11, max: 15, label: '11–15' },
+  { min: 16, max: 17, label: '16–18' },
+];
+
+/** 18–30 report: early adulthood bands. */
+const AGE_18_30_CHART_BUCKETS = [
+  { min: 18, max: 20, label: '18–20' },
+  { min: 21, max: 25, label: '21–25' },
+  { min: 26, max: 30, label: '26–30' },
+];
+
+/** Married report: adult bands with a wide young-adult bucket and decennial bands above 30. */
+const MARRIED_AGE_CHART_BUCKETS = [
+  { min: 18, max: 30, label: '18–30' },
+  { min: 31, max: 40, label: '31–40' },
+  { min: 41, max: 50, label: '41–50' },
+  { min: 51, max: 60, label: '51–60' },
+  { min: 61, max: 70, label: '61–70' },
+  { min: 71, max: 80, label: '71–80' },
+  { min: 81, max: null, label: '80+' },
+];
+
+/** @param {string} slug @returns {AgeChartBucket[]} */
+export function getAgeChartBuckets(slug) {
+  switch (slug) {
+    case 'age-under-18':
+      return UNDER_18_AGE_CHART_BUCKETS;
+    case 'age-18-30':
+      return AGE_18_30_CHART_BUCKETS;
+    case 'age-30-50':
+      return fiveYearBucketsInRange(31, 50);
+    case 'age-50-70':
+      return fiveYearBucketsInRange(51, 70);
+    case 'age-above-70':
+      return fiveYearBucketsWithOpenTail(71, 85, '86+');
+    case 'married':
+      return MARRIED_AGE_CHART_BUCKETS;
+    default:
+      return DEFAULT_AGE_CHART_BUCKETS;
+  }
+}
+
+/** @param {number} age @param {AgeChartBucket[]} buckets */
+function bucketIndexForAge(age, buckets) {
+  for (let i = 0; i < buckets.length; i += 1) {
+    const bucket = buckets[i];
+    if (age < bucket.min) return -1;
+    if (bucket.max == null || age <= bucket.max) return i;
+  }
+  return -1;
+}
+
 /** @type {Record<string, { slug: string; title: string; section: string; filter: (m: Record<string, unknown>, todayYmd?: string) => boolean; icon: import('lucide-react').LucideIcon; accent: string; border: string; chartType?: string }>} */
 export const REPORT_CONFIGS = {
   'total-members': {
@@ -237,28 +316,22 @@ export function filterMembersForReport(members, slug) {
 
 /**
  * @param {Array<Record<string, unknown>>} members
+ * @param {AgeChartBucket[]} [buckets]
  * @returns {{ label: string; count: number }[]}
  */
-export function ageDistributionChart(members) {
+export function ageDistributionChart(members, buckets = DEFAULT_AGE_CHART_BUCKETS) {
   const todayYmd = todayYmdInTimeZone('Asia/Kolkata');
-  const buckets = [
-    { label: 'Under 18', count: 0 },
-    { label: '18–30', count: 0 },
-    { label: '31–50', count: 0 },
-    { label: '51–70', count: 0 },
-    { label: 'Above 70', count: 0 },
-  ];
+  const counts = buckets.map((bucket) => ({ label: bucket.label, count: 0 }));
+
   for (const m of members) {
     if (!isLiving(m)) continue;
     const age = getMemberAge(m, todayYmd);
     if (age == null) continue;
-    if (age < 18) buckets[0].count += 1;
-    else if (age <= 30) buckets[1].count += 1;
-    else if (age <= 50) buckets[2].count += 1;
-    else if (age <= 70) buckets[3].count += 1;
-    else buckets[4].count += 1;
+    const idx = bucketIndexForAge(age, buckets);
+    if (idx >= 0) counts[idx].count += 1;
   }
-  return buckets.filter((b) => b.count > 0);
+
+  return counts.filter((b) => b.count > 0);
 }
 
 /**

@@ -2,25 +2,37 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 import { notificationsApi } from '../services/api';
+import { getApiErrorMessage } from '../lib/apiErrorMessage';
 
 const POLL_MS = 30_000;
+const FEED_CHANGED_EVENT = 'jagiris:notifications-changed';
+
+/** Notify all mounted feeds to refresh (e.g. after foreground push). */
+export function requestNotificationFeedRefresh() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(FEED_CHANGED_EVENT));
+  }
+}
 
 export function useNotificationFeed(enabled = true) {
   const [items, setItems] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const mountedRef = useRef(true);
 
   const refresh = useCallback(async () => {
     if (!enabled) return;
     setLoading(true);
     try {
-      const { data } = await notificationsApi.listFeed({ limit: 30 });
+      const { data } = await notificationsApi.listFeed({ limit: 50 });
       if (!mountedRef.current) return;
       setItems(data.items || []);
       setUnreadCount(data.unreadCount ?? 0);
-    } catch (_) {
-      /* ignore poll errors */
+      setError(null);
+    } catch (err) {
+      if (!mountedRef.current) return;
+      setError(getApiErrorMessage(err, 'Could not load notifications'));
     } finally {
       if (mountedRef.current) setLoading(false);
     }
@@ -38,7 +50,9 @@ export function useNotificationFeed(enabled = true) {
     refresh();
     const interval = setInterval(refresh, POLL_MS);
     const onFocus = () => refresh();
+    const onFeedChanged = () => refresh();
     window.addEventListener('focus', onFocus);
+    window.addEventListener(FEED_CHANGED_EVENT, onFeedChanged);
     let resumeListener;
     if (Capacitor.isNativePlatform()) {
       resumeListener = CapApp.addListener('appStateChange', ({ isActive }) => {
@@ -48,6 +62,7 @@ export function useNotificationFeed(enabled = true) {
     return () => {
       clearInterval(interval);
       window.removeEventListener('focus', onFocus);
+      window.removeEventListener(FEED_CHANGED_EVENT, onFeedChanged);
       if (resumeListener) resumeListener.then((l) => l.remove());
     };
   }, [enabled, refresh]);
@@ -56,10 +71,15 @@ export function useNotificationFeed(enabled = true) {
     try {
       await notificationsApi.markFeedRead(id);
       setItems((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, read_at: new Date().toISOString() } : n))
+        prev.map((n) =>
+          n.id === id ? { ...n, read_at: n.read_at || new Date().toISOString() } : n
+        )
       );
       setUnreadCount((c) => Math.max(0, c - 1));
-    } catch (_) {}
+      setError(null);
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Could not update notification'));
+    }
   }, []);
 
   const markAllRead = useCallback(async () => {
@@ -67,10 +87,13 @@ export function useNotificationFeed(enabled = true) {
       await notificationsApi.markAllFeedRead();
       setItems((prev) => prev.map((n) => ({ ...n, read_at: n.read_at || new Date().toISOString() })));
       setUnreadCount(0);
-    } catch (_) {}
+      setError(null);
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Could not mark notifications as read'));
+    }
   }, []);
 
-  return { items, unreadCount, loading, refresh, markRead, markAllRead };
+  return { items, unreadCount, loading, error, refresh, markRead, markAllRead };
 }
 
 export function formatNotificationTime(iso) {

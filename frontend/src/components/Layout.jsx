@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import TopBar from './TopBar';
 import Sidebar from './Sidebar';
+import NavigationOriginTracker from './NavigationOriginTracker';
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -16,6 +17,7 @@ export default function Layout() {
 
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-gray-50 dark:bg-gray-950">
+      <NavigationOriginTracker />
       <TopBar onMenuClick={() => setSidebarOpen((o) => !o)} />
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />

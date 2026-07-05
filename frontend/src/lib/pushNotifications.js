@@ -63,8 +63,8 @@ export async function initPushNotifications(onTokenReceived, onNotificationTappe
     console.error('[push] Registration error:', err);
   });
 
-  PushNotifications.addListener('pushNotificationReceived', (notification) => {
-    console.log('[push] Received in foreground:', notification);
+  PushNotifications.addListener('pushNotificationReceived', () => {
+    requestNotificationFeedRefresh();
   });
 
   PushNotifications.addListener('pushNotificationActionPerformed', (action) => {

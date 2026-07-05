@@ -11,6 +11,7 @@ router.delete('/token', auth, ctrl.unregisterToken);
 
 // In-app feed (header bell)
 router.get('/feed', auth, resolveFamilyContext, ctrl.listFeed);
+router.post('/feed/test', auth, requireAdmin, resolveFamilyContext, ctrl.sendTestNotification);
 router.patch('/feed/read-all', auth, resolveFamilyContext, ctrl.markAllFeedRead);
 router.patch('/feed/:id/read', auth, resolveFamilyContext, ctrl.markFeedRead);
 

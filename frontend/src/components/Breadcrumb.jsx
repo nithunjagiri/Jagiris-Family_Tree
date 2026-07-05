@@ -1,6 +1,7 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Home } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { performAppBack } from '../lib/appBackNavigation';
 
 /**
  * @param {{ label: string; to?: string }[]} items - Last item is the current page (no link).
@@ -8,18 +9,10 @@ import { cn } from '../lib/utils';
  */
 export default function Breadcrumb({ items, backTo, className }) {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleBack = () => {
-    if (backTo) {
-      navigate(backTo);
-      return;
-    }
-    const idx = typeof window !== 'undefined' ? window.history.state?.idx : undefined;
-    if (typeof idx === 'number' ? idx > 0 : window.history.length > 1) {
-      navigate(-1);
-    } else {
-      navigate('/');
-    }
+    performAppBack(navigate, location.pathname, backTo);
   };
 
   return (

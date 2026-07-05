@@ -1,8 +1,43 @@
 const db = require('../database/db');
 const { getFamilyRecipientUserIds } = require('./notificationRecipients');
+const { ensurePlacesAuditSchema } = require('../database/ensurePlacesAuditSchema');
+
+let schemaReady = false;
+
+async function ensureNotificationSchema() {
+  if (schemaReady) return;
+  await ensurePlacesAuditSchema();
+  schemaReady = true;
+}
 
 /**
- * Fan-out an in-app notification to family members except the actor.
+ * Repair shared-family access when data exists but no users are linked for notifications.
+ * @param {number} familyId
+ */
+async function ensureFamilyNotificationRecipients(familyId) {
+  const existing = await db.query(
+    'SELECT COUNT(*)::int AS c FROM family_memberships WHERE family_id = $1',
+    [familyId]
+  );
+  if ((existing.rows[0]?.c || 0) > 0) return;
+
+  const hasMembers = await db.query(
+    'SELECT 1 FROM family_members WHERE family_id = $1 LIMIT 1',
+    [familyId]
+  );
+  if (hasMembers.rows.length === 0) return;
+
+  await db.query(
+    `INSERT INTO family_memberships (user_id, family_id, role)
+     SELECT u.id, $1, CASE WHEN u.is_admin = TRUE THEN 'owner' ELSE 'member' END
+     FROM users u
+     ON CONFLICT (user_id, family_id) DO NOTHING`,
+    [familyId]
+  );
+}
+
+/**
+ * Fan-out an in-app notification to family members.
  */
 async function notifyFamilyUsers({
   familyId,
@@ -21,18 +56,25 @@ async function notifyFamilyUsers({
 }) {
   if (!familyId || !type || !title) return;
 
+  await ensureNotificationSchema();
+  await ensureFamilyNotificationRecipients(familyId);
+
   let userIds = await getFamilyRecipientUserIds(familyId, {
     targetAudience,
     excludeUserId: includeActor ? null : excludeUserId,
   });
 
-  // Solo-family fallback: still notify the actor when they would otherwise see an empty feed.
-  if (userIds.length === 0 && excludeUserId) {
-    userIds = [excludeUserId];
+  const actorId = actorUserId ?? excludeUserId ?? null;
+  if (userIds.length === 0 && actorId) {
+    userIds = [actorId];
   }
 
-  if (userIds.length === 0) return;
+  if (userIds.length === 0) {
+    console.warn(`[inAppNotifications] no recipients for family ${familyId} type=${type}`);
+    return;
+  }
 
+  let inserted = 0;
   for (const userId of userIds) {
     try {
       if (referenceKey) {
@@ -62,9 +104,14 @@ async function notifyFamilyUsers({
           referenceKey || null,
         ]
       );
+      inserted += 1;
     } catch (err) {
       console.error('[inAppNotifications] insert error:', err.message);
     }
+  }
+
+  if (inserted > 0) {
+    console.log(`[inAppNotifications] ${type} → ${inserted} user(s) in family ${familyId}`);
   }
 }
 
@@ -77,4 +124,4 @@ function scheduleInAppNotification(payload) {
   });
 }
 
-module.exports = { notifyFamilyUsers, scheduleInAppNotification };
+module.exports = { notifyFamilyUsers, scheduleInAppNotification, ensureNotificationSchema };

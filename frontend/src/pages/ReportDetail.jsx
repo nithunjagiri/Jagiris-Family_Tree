@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import {
   BarChart3,
@@ -27,17 +27,20 @@ import Breadcrumb from '../components/Breadcrumb';
 import { familyMembersApi } from '../services/api';
 import { cn } from '../lib/utils';
 import { downloadCsvFile } from '../lib/downloadFile';
+import { isCompactViewport, isNativeApp } from '../lib/mobile';
 import {
   filterMembersForReport,
   getReportConfig,
   genderSlices,
   bloodGroupBreakdown,
   ageDistributionChart,
+  getAgeChartBuckets,
   occupationChart,
   TABLE_COLUMNS,
   defaultVisibleColumns,
   displayMemberName,
 } from '../lib/reportsAnalytics';
+import { useRestorePageState, useSavePageStateOnUnmount } from '../hooks/usePageStatePersistence';
 
 const GENDER_COLORS = {
   male: '#2563eb',
@@ -70,14 +73,20 @@ function useChartTheme() {
 }
 
 async function downloadCsv(rows, columns, filename) {
+  const emptyPlaceholder = '\u2014';
+  const valueForExport = (v) => {
+    if (v == null) return '';
+    const s = String(v);
+    return s === emptyPlaceholder ? '' : s;
+  };
   const escape = (v) => {
-    const s = String(v ?? '');
+    const s = valueForExport(v);
     if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
     return s;
   };
   const header = columns.map((c) => escape(c.label)).join(',');
   const body = rows.map((row) => columns.map((c) => escape(c.getValue(row))).join(',')).join('\n');
-  const blob = new Blob([`${header}\n${body}`], { type: 'text/csv;charset=utf-8;' });
+  const blob = new Blob([`\uFEFF${header}\n${body}`], { type: 'text/csv;charset=utf-8;' });
   const result = await downloadCsvFile(blob, filename);
   if (result?.savedTo) {
     alert(`Export saved to ${result.savedTo}:\n${filename}`);
@@ -92,11 +101,23 @@ function EmptyChart() {
   );
 }
 
-function ReportCharts({ members, chartType, chartTheme }) {
+function ReportCharts({ members, chartType, chartTheme, reportSlug }) {
   const genderData = useMemo(() => genderSlices(members), [members]);
-  const ageData = useMemo(() => ageDistributionChart(members), [members]);
+  const ageBuckets = useMemo(() => getAgeChartBuckets(reportSlug), [reportSlug]);
+  const ageData = useMemo(
+    () => ageDistributionChart(members, ageBuckets),
+    [members, ageBuckets]
+  );
   const bloodData = useMemo(() => bloodGroupBreakdown(members).chartData.map((d) => ({ label: d.group, count: d.count })), [members]);
   const occData = useMemo(() => occupationChart(members), [members]);
+  const compactCharts = isNativeApp() || isCompactViewport();
+  const denseAgeChart = compactCharts && ageData.length > 4;
+  const ageChartMargin = denseAgeChart
+    ? { top: 8, right: 12, left: 0, bottom: 52 }
+    : { top: 8, right: 16, left: 0, bottom: 8 };
+  const ageAxisTick = denseAgeChart
+    ? { fill: chartTheme.tick, fontSize: 9, angle: -40, textAnchor: 'end', height: 56 }
+    : { fill: chartTheme.tick, fontSize: compactCharts ? 10 : 11 };
 
   const tooltipStyle = {
     backgroundColor: chartTheme.tooltipBg,
@@ -166,16 +187,21 @@ function ReportCharts({ members, chartType, chartTheme }) {
         {ageData.length === 0 ? (
           <EmptyChart />
         ) : (
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={ageData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
-                <XAxis dataKey="label" tick={{ fill: chartTheme.tick, fontSize: 11 }} />
-                <YAxis allowDecimals={false} tick={{ fill: chartTheme.tick, fontSize: 12 }} />
-                <Tooltip contentStyle={tooltipStyle} />
-                <Bar dataKey="count" fill="#2563eb" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className={cn('h-72', denseAgeChart && 'overflow-x-auto touch-pan-x')}>
+            <div
+              className="h-full"
+              style={{ minWidth: denseAgeChart ? Math.max(ageData.length * 52, 280) : '100%' }}
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={ageData} margin={ageChartMargin}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
+                  <XAxis dataKey="label" tick={ageAxisTick} interval={0} />
+                  <YAxis allowDecimals={false} tick={{ fill: chartTheme.tick, fontSize: compactCharts ? 10 : 12 }} width={compactCharts ? 28 : undefined} />
+                  <Tooltip contentStyle={tooltipStyle} />
+                  <Bar dataKey="count" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         )}
       </div>
@@ -198,6 +224,29 @@ export default function ReportDetail() {
   const [visibleCols, setVisibleCols] = useState(() => defaultVisibleColumns(slug || ''));
   const [columnsOpen, setColumnsOpen] = useState(false);
 
+  const reportStoragePath = slug ? `/reports/${slug}` : '';
+  const prevSlugRef = useRef(null);
+
+  const applyRestoredPageState = useCallback((restored) => {
+    if (restored.tab === 'data' || restored.tab === 'charts') setTab(restored.tab);
+    if (typeof restored.page === 'number') setPage(restored.page);
+    if (typeof restored.pageSize === 'number') setPageSize(restored.pageSize);
+    if (typeof restored.sortCol === 'string') setSortCol(restored.sortCol);
+    if (restored.sortDir === 'asc' || restored.sortDir === 'desc') setSortDir(restored.sortDir);
+    if (Array.isArray(restored.visibleCols)) setVisibleCols(restored.visibleCols);
+  }, []);
+
+  useRestorePageState(applyRestoredPageState);
+
+  useSavePageStateOnUnmount(reportStoragePath, {
+    tab,
+    page,
+    pageSize,
+    sortCol,
+    sortDir,
+    visibleCols,
+  });
+
   useEffect(() => {
     let cancelled = false;
     familyMembersApi
@@ -217,6 +266,12 @@ export default function ReportDetail() {
   }, []);
 
   useEffect(() => {
+    if (prevSlugRef.current === null) {
+      prevSlugRef.current = slug;
+      return;
+    }
+    if (prevSlugRef.current === slug) return;
+    prevSlugRef.current = slug;
     if (slug) setVisibleCols(defaultVisibleColumns(slug));
     setPage(0);
     setSortCol('name');
@@ -469,7 +524,12 @@ export default function ReportDetail() {
           </div>
         </div>
       ) : (
-        <ReportCharts members={filtered} chartType={config.chartType || 'demographics'} chartTheme={chartTheme} />
+        <ReportCharts
+          members={filtered}
+          chartType={config.chartType || 'demographics'}
+          chartTheme={chartTheme}
+          reportSlug={slug || ''}
+        />
       )}
     </div>
   );

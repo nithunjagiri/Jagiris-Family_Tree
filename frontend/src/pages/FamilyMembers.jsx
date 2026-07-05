@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useId } from 'react';
+import { useState, useEffect, useMemo, useId, useCallback } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { UserPlus, Pencil, Trash2, User, Search, LayoutGrid, List, X, Filter } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -15,6 +15,7 @@ import {
   hasActiveMemberFilters,
 } from '../lib/memberFilters';
 import ModulePageHeader from '../components/ModulePageHeader';
+import { useRestorePageState, useSavePageStateOnUnmount } from '../hooks/usePageStatePersistence';
 
 function displayName(m) {
   return [m.name, m.surname].filter(Boolean).join(' ') || m.name || '';
@@ -152,6 +153,33 @@ export default function FamilyMembers() {
     setSaveFlash(msg);
     navigate(location.pathname, { replace: true, state: {} });
   }, [location.state, location.pathname, navigate]);
+
+  const applyRestoredPageState = useCallback(
+    (restored) => {
+      if (restored.surnameFilter != null) setSurnameFilter(String(restored.surnameFilter));
+      if (restored.placeFilter != null) setPlaceFilter(String(restored.placeFilter));
+      if (restored.genderFilter != null) setGenderFilter(String(restored.genderFilter));
+      if (restored.searchQuery != null) setSearchQuery(String(restored.searchQuery));
+      if (restored.viewMode === 'grid' || restored.viewMode === 'list') setViewMode(restored.viewMode);
+      if (typeof restored.filtersOpen === 'boolean') setFiltersOpen(restored.filtersOpen);
+      if (typeof restored.searchOpen === 'boolean') setSearchOpen(restored.searchOpen);
+      if (restored.statusFilter) setSearchParams({ status: String(restored.statusFilter) });
+    },
+    [setSearchParams]
+  );
+
+  useRestorePageState(applyRestoredPageState);
+
+  useSavePageStateOnUnmount('/family-members', {
+    surnameFilter,
+    placeFilter,
+    genderFilter,
+    searchQuery,
+    viewMode,
+    filtersOpen,
+    searchOpen,
+    statusFilter: statusFilter || '',
+  });
 
   const filteredMembers = useMemo(
     () =>

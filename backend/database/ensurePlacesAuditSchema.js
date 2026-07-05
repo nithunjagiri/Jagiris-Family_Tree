@@ -370,6 +370,16 @@ async function ensurePlacesAuditSchema() {
     ON user_notifications (user_id, type, reference_key)
     WHERE reference_key IS NOT NULL
   `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS user_feed_dismissals (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      family_id INTEGER NOT NULL REFERENCES families(id) ON DELETE CASCADE,
+      reference_key VARCHAR(255) NOT NULL,
+      dismissed_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (user_id, family_id, reference_key)
+    )
+  `);
 }
 
 module.exports = { ensurePlacesAuditSchema };

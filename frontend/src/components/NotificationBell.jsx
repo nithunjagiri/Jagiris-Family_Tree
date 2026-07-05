@@ -9,9 +9,15 @@ import {
   Cake,
   Gem,
   X,
+  AlertCircle,
+  RefreshCw,
+  Sparkles,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useNotificationFeed, formatNotificationTime } from '../hooks/useNotificationFeed';
+import { notificationsApi } from '../services/api';
+import { getApiErrorMessage } from '../lib/apiErrorMessage';
+import { useAuth } from '../context/AuthContext';
 
 function iconForType(type) {
   switch (type) {
@@ -20,13 +26,19 @@ function iconForType(type) {
     case 'member_deceased':
       return Heart;
     case 'event_added':
+    case 'event_upcoming':
+    case 'event':
       return Calendar;
     case 'announcement':
       return Megaphone;
     case 'birthday':
+    case 'birthday_upcoming':
       return Cake;
     case 'anniversary':
+    case 'anniversary_upcoming':
       return Gem;
+    case 'test':
+      return Sparkles;
     default:
       return Bell;
   }
@@ -34,10 +46,14 @@ function iconForType(type) {
 
 export default function NotificationBell() {
   const navigate = useNavigate();
+  const { isAdmin } = useAuth();
   const [open, setOpen] = useState(false);
-  const { items, unreadCount, markRead, markAllRead, refresh } = useNotificationFeed(true);
+  const [testSending, setTestSending] = useState(false);
+  const [actionError, setActionError] = useState(null);
+  const { items, unreadCount, loading, error, markRead, markAllRead, refresh } = useNotificationFeed(true);
 
   const badge = unreadCount > 9 ? '9+' : String(unreadCount);
+  const displayError = actionError || error;
 
   const handleItemClick = async (item) => {
     if (!item.read_at) await markRead(item.id);
@@ -51,6 +67,19 @@ export default function NotificationBell() {
       navigate('/', { state: { scrollTo: 'dashboard-announcements' } });
     } else if (path) {
       navigate(path);
+    }
+  };
+
+  const handleSendTest = async () => {
+    setTestSending(true);
+    setActionError(null);
+    try {
+      await notificationsApi.sendTestNotification();
+      await refresh();
+    } catch (err) {
+      setActionError(getApiErrorMessage(err, 'Could not send test notification'));
+    } finally {
+      setTestSending(false);
     }
   };
 
@@ -92,6 +121,15 @@ export default function NotificationBell() {
             <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3 dark:border-gray-700">
               <p className="text-sm font-semibold text-gray-900 dark:text-white">Notifications</p>
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => refresh()}
+                  disabled={loading}
+                  className="touch-manipulation rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 disabled:opacity-50 dark:hover:bg-gray-700"
+                  aria-label="Refresh notifications"
+                >
+                  <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
+                </button>
                 {unreadCount > 0 && (
                   <button
                     type="button"
@@ -111,8 +149,21 @@ export default function NotificationBell() {
                 </button>
               </div>
             </div>
+
+            {displayError && (
+              <div className="flex items-start gap-2 border-b border-red-200 bg-red-50 px-4 py-2.5 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <p className="min-w-0 flex-1">{displayError}</p>
+              </div>
+            )}
+
             <ul className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
-              {items.length === 0 && (
+              {loading && items.length === 0 && (
+                <li className="px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                  Loading notifications…
+                </li>
+              )}
+              {!loading && items.length === 0 && !displayError && (
                 <li className="px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
                   No notifications yet
                 </li>
@@ -156,6 +207,7 @@ export default function NotificationBell() {
                         )}
                         <p className="mt-1 text-[10px] text-gray-400 dark:text-gray-500">
                           {formatNotificationTime(item.created_at)}
+                          {item.is_computed ? ' · Upcoming' : ''}
                         </p>
                       </div>
                       {unread && (
@@ -166,6 +218,19 @@ export default function NotificationBell() {
                 );
               })}
             </ul>
+
+            {isAdmin && (
+              <div className="border-t border-gray-100 px-4 py-3 dark:border-gray-700">
+                <button
+                  type="button"
+                  onClick={handleSendTest}
+                  disabled={testSending}
+                  className="w-full touch-manipulation rounded-lg border border-dashed border-gray-300 px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700/50"
+                >
+                  {testSending ? 'Sending test…' : 'Send test notification (admin)'}
+                </button>
+              </div>
+            )}
           </div>
         </>
       )}

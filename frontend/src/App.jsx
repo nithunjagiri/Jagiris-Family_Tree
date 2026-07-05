@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useRef } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Capacitor } from '@capacitor/core';
 import { useAuth } from './context/AuthContext';
@@ -8,6 +8,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
+import { performAppBack } from './lib/appBackNavigation';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 import FamilyMembers from './pages/FamilyMembers';
@@ -66,25 +67,26 @@ function AdminRoute({ children }) {
 function useAndroidBackButton() {
   const navigate = useNavigate();
   const location = useLocation();
+  const locationRef = useRef(location);
+  locationRef.current = location;
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
 
-    const listener = CapApp.addListener('backButton', ({ canGoBack }) => {
+    const listener = CapApp.addListener('backButton', () => {
       if (document.fullscreenElement) {
         document.exitFullscreen().catch(() => {});
         return;
       }
-      if (location.pathname === '/' || location.pathname === '/login') {
+      const { pathname } = locationRef.current;
+      if (pathname === '/' || pathname === '/login') {
         CapApp.minimizeApp();
-      } else if (canGoBack || window.history.length > 1) {
-        navigate(-1);
-      } else {
-        CapApp.minimizeApp();
+        return;
       }
+      performAppBack(navigate, pathname);
     });
     return () => { listener.then((l) => l.remove()); };
-  }, [navigate, location.pathname]);
+  }, [navigate]);
 }
 
 function CaseInsensitiveRedirect() {

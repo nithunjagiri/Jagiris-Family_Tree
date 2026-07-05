@@ -1,5 +1,7 @@
 const db = require('../database/db');
 const { logAudit } = require('../lib/auditLog');
+const { buildComputedFeedItems } = require('../lib/computedFeedItems');
+const { getDismissedFeedKeys, dismissFeedItem } = require('../lib/feedDismissals');
 const { sendToUsers } = require('../lib/fcmSender');
 const { scheduleInAppNotification } = require('../lib/inAppNotifications');
 const { getFamilyRecipientUserIds } = require('../lib/notificationRecipients');
@@ -212,27 +214,48 @@ exports.deleteAnnouncement = async (req, res, next) => {
 exports.listFeed = async (req, res, next) => {
   const run = async () => {
     const familyId = req.familyId;
-    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 30, 1), 100);
+    const userId = req.user.id;
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
 
-    const unreadResult = await db.query(
-      `SELECT COUNT(*)::int AS c FROM user_notifications
-       WHERE user_id = $1 AND family_id = $2 AND read_at IS NULL`,
-      [req.user.id, familyId]
+    const dismissed = await getDismissedFeedKeys(userId, familyId);
+
+    const unreadStored = await db.query(
+      `SELECT COUNT(*)::int AS c FROM user_notifications un
+       WHERE un.user_id = $1
+         AND un.family_id IN (SELECT fm.family_id FROM family_memberships fm WHERE fm.user_id = $1)
+         AND un.read_at IS NULL`,
+      [userId]
     );
 
     const itemsResult = await db.query(
-      `SELECT id, type, title, body, entity_type, entity_id, link_path,
-              actor_user_id, read_at, created_at
-       FROM user_notifications
-       WHERE user_id = $1 AND family_id = $2
-       ORDER BY created_at DESC
-       LIMIT $3`,
-      [req.user.id, familyId, limit]
+      `SELECT un.id, un.type, un.title, un.body, un.entity_type, un.entity_id, un.link_path,
+              un.actor_user_id, un.read_at, un.created_at
+       FROM user_notifications un
+       WHERE un.user_id = $1
+         AND un.family_id IN (SELECT fm.family_id FROM family_memberships fm WHERE fm.user_id = $1)
+       ORDER BY un.created_at DESC
+       LIMIT $2`,
+      [userId, limit]
     );
 
+    const stored = itemsResult.rows.map((row) => ({
+      ...row,
+      id: String(row.id),
+      is_computed: false,
+    }));
+
+    const computed = await buildComputedFeedItems(familyId, dismissed);
+    const merged = [...stored, ...computed]
+      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+      .slice(0, limit);
+
+    const unreadCount = (unreadStored.rows[0]?.c ?? 0) + computed.length;
+
     return {
-      items: itemsResult.rows,
-      unreadCount: unreadResult.rows[0]?.c ?? 0,
+      items: merged,
+      unreadCount,
+      storedCount: stored.length,
+      computedCount: computed.length,
     };
   };
 
@@ -255,6 +278,14 @@ exports.listFeed = async (req, res, next) => {
 exports.markFeedRead = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const idStr = String(id);
+
+    if (idStr.startsWith('computed:')) {
+      const referenceKey = idStr.slice('computed:'.length);
+      await dismissFeedItem(req.user.id, req.familyId, referenceKey);
+      return res.json({ ok: true, dismissed: true });
+    }
+
     const result = await db.query(
       `UPDATE user_notifications SET read_at = NOW()
        WHERE id = $1 AND user_id = $2 AND family_id = $3 AND read_at IS NULL
@@ -266,6 +297,14 @@ exports.markFeedRead = async (req, res, next) => {
     }
     res.json({ ok: true });
   } catch (err) {
+    if (err.code === '42P01') {
+      try {
+        await ensurePlacesAuditSchema();
+        return exports.markFeedRead(req, res, next);
+      } catch (err2) {
+        return next(err2);
+      }
+    }
     next(err);
   }
 };
@@ -277,7 +316,49 @@ exports.markAllFeedRead = async (req, res, next) => {
        WHERE user_id = $1 AND family_id = $2 AND read_at IS NULL`,
       [req.user.id, req.familyId]
     );
+
+    const computed = await buildComputedFeedItems(req.familyId, new Set());
+    for (const item of computed) {
+      if (item.reference_key) {
+        await dismissFeedItem(req.user.id, req.familyId, item.reference_key);
+      }
+    }
+
     res.json({ ok: true });
+  } catch (err) {
+    if (err.code === '42P01') {
+      try {
+        await ensurePlacesAuditSchema();
+        return exports.markAllFeedRead(req, res, next);
+      } catch (err2) {
+        return next(err2);
+      }
+    }
+    next(err);
+  }
+};
+
+exports.sendTestNotification = async (req, res, next) => {
+  try {
+    const familyId = req.familyId;
+    const refKey = `test-${Date.now()}`;
+    const { notifyFamilyUsers } = require('../lib/inAppNotifications');
+
+    await notifyFamilyUsers({
+      familyId,
+      excludeUserId: null,
+      includeActor: true,
+      type: 'test',
+      title: 'Test notification',
+      body: 'Your notification bell is working. Stored notifications are delivered correctly.',
+      entityType: 'system',
+      entityId: null,
+      linkPath: '/',
+      actorUserId: req.user.id,
+      referenceKey: refKey,
+    });
+
+    res.json({ ok: true, message: 'Test notification sent to your family users.' });
   } catch (err) {
     next(err);
   }
