@@ -114,7 +114,7 @@ export default function NotificationBell() {
             className={cn(
               'z-[70] flex flex-col overflow-hidden border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800',
               'max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:max-h-[min(85vh,32rem)] max-md:rounded-t-2xl max-md:border-b-0 max-md:pb-safe',
-              'md:absolute md:right-0 md:top-full md:mt-1 md:w-[min(100vw-2rem,22rem)] md:rounded-xl md:shadow-lg'
+              'md:absolute md:right-0 md:top-full md:mt-1 md:w-[min(100vw-2rem,22rem)] md:max-h-[min(90vh,36rem)] md:rounded-xl md:shadow-lg'
             )}
           >
             <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-gray-300 dark:bg-gray-600 md:hidden" />
