@@ -130,17 +130,22 @@ async function ensurePlacesAuditSchema() {
   `);
 
   // Link legacy rows to a family. Prefer creator/owner family; fallback to first available family.
+  // Cast both sides to text to tolerate created_by / updated_by stored as VARCHAR on older schemas.
   await db.query(`
     UPDATE family_members fm
     SET family_id = COALESCE(
       (SELECT fm2.family_id
        FROM family_memberships fm2
-       WHERE fm2.user_id = fm.created_by
+       WHERE fm2.user_id::text = fm.created_by::text
+         AND fm.created_by IS NOT NULL
+         AND TRIM(fm.created_by::text) <> ''
        ORDER BY fm2.family_id
        LIMIT 1),
       (SELECT fm3.family_id
        FROM family_memberships fm3
-       WHERE fm3.user_id = fm.updated_by
+       WHERE fm3.user_id::text = fm.updated_by::text
+         AND fm.updated_by IS NOT NULL
+         AND TRIM(fm.updated_by::text) <> ''
        ORDER BY fm3.family_id
        LIMIT 1),
       (SELECT id FROM families ORDER BY id LIMIT 1)
@@ -242,7 +247,7 @@ async function ensurePlacesAuditSchema() {
     SET family_id = COALESCE(
       (SELECT fm.family_id
        FROM family_members fm
-       WHERE fm.birth_place_id = p.id OR fm.residence_place_id = p.id
+       WHERE fm.birth_place_id::text = p.id::text OR fm.residence_place_id::text = p.id::text
        ORDER BY fm.id
        LIMIT 1),
       (SELECT id FROM families ORDER BY id LIMIT 1)
