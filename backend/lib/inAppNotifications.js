@@ -16,14 +16,14 @@ async function ensureNotificationSchema() {
  */
 async function ensureFamilyNotificationRecipients(familyId) {
   const existing = await db.query(
-    'SELECT COUNT(*)::int AS c FROM family_memberships WHERE family_id = $1',
-    [familyId]
+    'SELECT COUNT(*)::int AS c FROM family_memberships WHERE family_id = $1::integer',
+    [Number(familyId)]
   );
   if ((existing.rows[0]?.c || 0) > 0) return;
 
   const hasMembers = await db.query(
-    'SELECT 1 FROM family_members WHERE family_id = $1 LIMIT 1',
-    [familyId]
+    'SELECT 1 FROM family_members WHERE family_id = $1::integer LIMIT 1',
+    [Number(familyId)]
   );
   if (hasMembers.rows.length === 0) return;
 
@@ -32,7 +32,7 @@ async function ensureFamilyNotificationRecipients(familyId) {
      SELECT u.id, $1, CASE WHEN u.is_admin = TRUE THEN 'owner' ELSE 'member' END
      FROM users u
      ON CONFLICT (user_id, family_id) DO NOTHING`,
-    [familyId]
+    [Number(familyId)]
   );
 }
 
@@ -80,8 +80,8 @@ async function notifyFamilyUsers({
       if (referenceKey) {
         const dup = await db.query(
           `SELECT 1 FROM user_notifications
-           WHERE user_id = $1 AND type = $2 AND reference_key = $3 LIMIT 1`,
-          [userId, type, referenceKey]
+           WHERE user_id = $1::integer AND type = $2 AND reference_key = $3 LIMIT 1`,
+          [Number(userId), type, referenceKey]
         );
         if (dup.rows.length > 0) continue;
       }
@@ -92,8 +92,8 @@ async function notifyFamilyUsers({
            entity_type, entity_id, link_path, actor_user_id, reference_key
          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
         [
-          userId,
-          familyId,
+          Number(userId),
+          Number(familyId),
           type,
           title,
           body || null,

@@ -2,7 +2,7 @@ import { clearNavigationOrigin, resolveBackNavigation } from './navigationOrigin
 
 /**
  * Shared in-app Back behavior for UI buttons and the Android hardware back key.
- * Prefers preserved cross-module origin, then browser history, then home.
+ * Jumps directly to the preserved originating module when inside a workflow.
  * @param {import('react-router-dom').NavigateFunction} navigate
  * @param {string} pathname
  * @param {string | undefined} [explicitBackTo]
@@ -15,7 +15,7 @@ export function performAppBack(navigate, pathname, explicitBackTo) {
 
   const resolved = resolveBackNavigation(pathname);
   if (resolved) {
-    navigate(resolved.to, { state: resolved.state });
+    navigate(resolved.to, { replace: true, state: resolved.state });
     if (resolved.clearOrigin) clearNavigationOrigin();
     return;
   }

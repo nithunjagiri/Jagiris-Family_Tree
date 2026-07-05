@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, Navigate, useParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useParams } from 'react-router-dom';
 import {
   BarChart3,
   Table2,
@@ -40,6 +40,7 @@ import {
   defaultVisibleColumns,
   displayMemberName,
 } from '../lib/reportsAnalytics';
+import { returnToLinkState } from '../lib/navigationOrigin';
 import { useRestorePageState, useSavePageStateOnUnmount } from '../hooks/usePageStatePersistence';
 
 const GENDER_COLORS = {
@@ -211,6 +212,7 @@ function ReportCharts({ members, chartType, chartTheme, reportSlug }) {
 
 export default function ReportDetail() {
   const { slug } = useParams();
+  const location = useLocation();
   const config = getReportConfig(slug || '');
   const chartTheme = useChartTheme();
 
@@ -507,6 +509,7 @@ export default function ReportDetail() {
                           {col.id === 'name' ? (
                             <Link
                               to={`/family-members/${row.id}`}
+                              state={returnToLinkState(location)}
                               className="font-medium text-primary-600 hover:underline dark:text-primary-400"
                             >
                               {displayMemberName(row)}

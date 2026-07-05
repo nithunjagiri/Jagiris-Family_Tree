@@ -50,8 +50,8 @@ async function buildComputedFeedItems(familyId, dismissedKeys = new Set()) {
   const members = await db.query(
     `SELECT id, name, surname, date_of_birth, anniversary_date, is_alive, date_of_death
      FROM family_members
-     WHERE family_id = $1`,
-    [familyId]
+     WHERE family_id = $1::integer`,
+    [Number(familyId)]
   );
 
   for (const m of members.rows) {
@@ -123,12 +123,12 @@ async function buildComputedFeedItems(familyId, dismissedKeys = new Set()) {
   const events = await db.query(
     `SELECT id, title, event_date, description
      FROM events
-     WHERE family_id = $1
-       AND event_date >= $2::date
-       AND event_date <= $3::date
-     ORDER BY event_date ASC
+     WHERE family_id = $1::integer
+       AND event_date::date >= $2::date
+       AND event_date::date <= $3::date
+     ORDER BY event_date::date ASC
      LIMIT 30`,
-    [familyId, today, endYmd]
+    [Number(familyId), today, endYmd]
   );
 
   for (const ev of events.rows) {

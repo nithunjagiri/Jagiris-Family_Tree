@@ -12,9 +12,9 @@ async function getUserFamilies(userId) {
     `SELECT fm.family_id, fm.role, f.name
      FROM family_memberships fm
      JOIN families f ON f.id = fm.family_id
-     WHERE fm.user_id = $1
+     WHERE fm.user_id = $1::integer
      ORDER BY fm.family_id ASC`,
-    [userId]
+    [Number(userId)]
   );
   return result.rows;
 }

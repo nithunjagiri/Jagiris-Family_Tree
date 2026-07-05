@@ -327,6 +327,7 @@ export default function AddMemberForm() {
     const display = [name, surname].filter(Boolean).join(' ').trim() || String(name || '').trim() || 'Member';
     const returnTo = getNavigationOriginPath() || state.returnTo || null;
     navigate('/family-members', {
+      replace: true,
       state: {
         memberSavedMessage: isEdit
           ? `Saved changes for ${display}.`

@@ -8,8 +8,8 @@ const db = require('../database/db');
 async function getDismissedFeedKeys(userId, familyId) {
   const result = await db.query(
     `SELECT reference_key FROM user_feed_dismissals
-     WHERE user_id = $1 AND family_id = $2`,
-    [userId, familyId]
+     WHERE user_id = $1::integer AND family_id = $2::integer`,
+    [Number(userId), Number(familyId)]
   );
   return new Set(result.rows.map((r) => r.reference_key));
 }
@@ -23,9 +23,9 @@ async function dismissFeedItem(userId, familyId, referenceKey) {
   if (!referenceKey) return;
   await db.query(
     `INSERT INTO user_feed_dismissals (user_id, family_id, reference_key)
-     VALUES ($1, $2, $3)
+     VALUES ($1::integer, $2::integer, $3)
      ON CONFLICT (user_id, family_id, reference_key) DO NOTHING`,
-    [userId, familyId, referenceKey]
+    [Number(userId), Number(familyId), referenceKey]
   );
 }
 

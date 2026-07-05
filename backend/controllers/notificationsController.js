@@ -213,29 +213,41 @@ exports.deleteAnnouncement = async (req, res, next) => {
 
 exports.listFeed = async (req, res, next) => {
   const run = async () => {
-    const familyId = req.familyId;
-    const userId = req.user.id;
+    const familyId = Number(req.familyId);
+    const userId = Number(req.user.id);
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
 
-    const dismissed = await getDismissedFeedKeys(userId, familyId);
+    const familyIds = (req.familyMemberships || [])
+      .map((m) => Number(m.family_id))
+      .filter((n) => Number.isInteger(n) && n > 0);
+    if (familyIds.length === 0) familyIds.push(familyId);
+
+    let dismissed = new Set();
+    try {
+      dismissed = await getDismissedFeedKeys(userId, familyId);
+    } catch (err) {
+      if (err.code !== '42P01') throw err;
+      await ensurePlacesAuditSchema();
+      dismissed = await getDismissedFeedKeys(userId, familyId);
+    }
 
     const unreadStored = await db.query(
       `SELECT COUNT(*)::int AS c FROM user_notifications un
-       WHERE un.user_id = $1
-         AND un.family_id IN (SELECT fm.family_id FROM family_memberships fm WHERE fm.user_id = $1)
+       WHERE un.user_id = $1::integer
+         AND un.family_id = ANY($2::integer[])
          AND un.read_at IS NULL`,
-      [userId]
+      [userId, familyIds]
     );
 
     const itemsResult = await db.query(
       `SELECT un.id, un.type, un.title, un.body, un.entity_type, un.entity_id, un.link_path,
               un.actor_user_id, un.read_at, un.created_at
        FROM user_notifications un
-       WHERE un.user_id = $1
-         AND un.family_id IN (SELECT fm.family_id FROM family_memberships fm WHERE fm.user_id = $1)
+       WHERE un.user_id = $1::integer
+         AND un.family_id = ANY($2::integer[])
        ORDER BY un.created_at DESC
-       LIMIT $2`,
-      [userId, limit]
+       LIMIT $3`,
+      [userId, familyIds, limit]
     );
 
     const stored = itemsResult.rows.map((row) => ({
@@ -244,7 +256,13 @@ exports.listFeed = async (req, res, next) => {
       is_computed: false,
     }));
 
-    const computed = await buildComputedFeedItems(familyId, dismissed);
+    let computed = [];
+    try {
+      computed = await buildComputedFeedItems(familyId, dismissed);
+    } catch (err) {
+      console.error('[notifications] computed feed error:', err.message);
+    }
+
     const merged = [...stored, ...computed]
       .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
       .slice(0, limit);
@@ -282,15 +300,20 @@ exports.markFeedRead = async (req, res, next) => {
 
     if (idStr.startsWith('computed:')) {
       const referenceKey = idStr.slice('computed:'.length);
-      await dismissFeedItem(req.user.id, req.familyId, referenceKey);
+      await dismissFeedItem(Number(req.user.id), Number(req.familyId), referenceKey);
       return res.json({ ok: true, dismissed: true });
+    }
+
+    const numericId = Number(id);
+    if (!Number.isInteger(numericId) || numericId <= 0) {
+      return res.status(400).json({ error: 'Invalid notification id' });
     }
 
     const result = await db.query(
       `UPDATE user_notifications SET read_at = NOW()
-       WHERE id = $1 AND user_id = $2 AND family_id = $3 AND read_at IS NULL
+       WHERE id = $1::integer AND user_id = $2::integer AND family_id = $3::integer AND read_at IS NULL
        RETURNING id`,
-      [id, req.user.id, req.familyId]
+      [numericId, Number(req.user.id), Number(req.familyId)]
     );
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Notification not found' });
@@ -311,16 +334,19 @@ exports.markFeedRead = async (req, res, next) => {
 
 exports.markAllFeedRead = async (req, res, next) => {
   try {
+    const userId = Number(req.user.id);
+    const familyId = Number(req.familyId);
+
     await db.query(
       `UPDATE user_notifications SET read_at = NOW()
-       WHERE user_id = $1 AND family_id = $2 AND read_at IS NULL`,
-      [req.user.id, req.familyId]
+       WHERE user_id = $1::integer AND family_id = $2::integer AND read_at IS NULL`,
+      [userId, familyId]
     );
 
-    const computed = await buildComputedFeedItems(req.familyId, new Set());
+    const computed = await buildComputedFeedItems(familyId, new Set());
     for (const item of computed) {
       if (item.reference_key) {
-        await dismissFeedItem(req.user.id, req.familyId, item.reference_key);
+        await dismissFeedItem(userId, familyId, item.reference_key);
       }
     }
 

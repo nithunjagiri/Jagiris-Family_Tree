@@ -15,13 +15,13 @@ async function getFamilyRecipientUserIds(familyId, { targetAudience = 'all', exc
       `SELECT fm.user_id
        FROM family_memberships fm
        INNER JOIN users u ON u.id = fm.user_id AND u.is_admin = TRUE
-       WHERE fm.family_id = $1`,
-      [familyId]
+       WHERE fm.family_id = $1::integer`,
+      [Number(familyId)]
     );
   } else {
     result = await db.query(
-      'SELECT user_id FROM family_memberships WHERE family_id = $1',
-      [familyId]
+      'SELECT user_id FROM family_memberships WHERE family_id = $1::integer',
+      [Number(familyId)]
     );
   }
 

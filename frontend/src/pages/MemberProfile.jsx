@@ -1,11 +1,12 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation } from 'react-router-dom';
 import { ArrowLeft, Pencil, User, Users, Mail, Phone, MessageCircle, MapPin, Briefcase, Calendar, Activity, X } from 'lucide-react';
 import { familyMembersApi } from '../services/api';
 import { formatCalendarLong } from '../lib/calendarDate';
 import { HIDE_RELATION_NAMES_IN_UI } from '../lib/appDisplaySettings';
 import { resolveBackendPublicUrl } from '../lib/backendOrigin';
 import { useAppBackNavigation } from '../hooks/useAppBackNavigation';
+import { getNavigationOriginPath } from '../lib/navigationOrigin';
 
 const ProfileMiniMap = lazy(() => import('../components/ProfileMiniMap'));
 
@@ -29,7 +30,9 @@ function spouseDisplayName(s) {
 
 export default function MemberProfile() {
   const { id } = useParams();
+  const location = useLocation();
   const handleBack = useAppBackNavigation();
+  const returnTo = location.state?.returnTo || getNavigationOriginPath() || null;
   const [member, setMember] = useState(null);
   const [spouse, setSpouse] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -118,6 +121,7 @@ export default function MemberProfile() {
         </button>
         <Link
           to={`/family-members/edit/${id}`}
+          state={returnTo ? { returnTo } : undefined}
           className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
         >
           <Pencil className="h-4 w-4" />
