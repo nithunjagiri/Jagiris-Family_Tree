@@ -10,17 +10,10 @@ Source of truth for the Android launcher icon and splash assets.
   - `splash.png`, `splash-dark.png`
   - `logo.png` / `icon.png` (easy-mode aliases of the final mark)
 
-## Regenerate source layers (optional)
-
-If you replace `kutumbam-final-full-name.png`, rebuild Capacitor inputs:
-
-```bash
-python resources/_prepare_assets.py
-```
-
 ## Regenerate Android mipmaps
 
-From `frontend/`:
+Uses the full approved medallion (`kutumbam-final-full-name.png`) — circle + tree +
+**JAGIRI'S / KUTUMBAM** — without cropping the design.
 
 ```bash
 npm run icons:android

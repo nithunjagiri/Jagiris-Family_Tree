@@ -10,7 +10,7 @@
     "build:android": "vite build --mode capacitor && npx cap sync android",
     "open:android": "npx cap open android",
     "sync:android": "npx cap sync android",
-    "icons:android": "npx capacitor-assets generate --android",
+    "icons:android": "python resources/_prepare_assets.py && npx capacitor-assets generate --android && python resources/_patch_adaptive_inset.py && python resources/_apply_large_mipmaps.py",
     "apk:debug": "npm run build:android && cd android && gradlew.bat assembleDebug",
     "apk:release": "npm run build:android && cd android && gradlew.bat assembleRelease"
   },
