@@ -16,7 +16,11 @@ export function navigateFromPushNotification(notification) {
   switch (data.type) {
     case 'event':
     case 'event_added':
-      window.location.href = '/events';
+      if (data.eventId) {
+        window.location.href = `/events/${data.eventId}`;
+      } else {
+        window.location.href = '/events';
+      }
       break;
     case 'announcement':
       window.location.href = '/#dashboard-announcements';

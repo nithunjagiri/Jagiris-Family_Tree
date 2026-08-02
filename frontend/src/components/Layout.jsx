@@ -19,7 +19,7 @@ export default function Layout() {
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-gray-50 dark:bg-gray-950">
       <NavigationOriginTracker />
       <TopBar onMenuClick={() => setSidebarOpen((o) => !o)} />
-      <div className="flex min-h-0 flex-1 overflow-hidden">
+      <div className="app-shell-body flex min-h-0 flex-1 overflow-hidden">
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         <main className={mainClass}>
           <Outlet />

@@ -161,7 +161,7 @@ async function checkEvents() {
       : `${evt.title} is happening tomorrow — don't miss it!`;
 
     const key = refKey('event', evt.id, eventDate);
-    const linkPath = '/events';
+    const linkPath = `/events/${evt.id}`;
 
     const familyUsers = await db.query(
       `SELECT user_id FROM family_memberships WHERE family_id = $1`,

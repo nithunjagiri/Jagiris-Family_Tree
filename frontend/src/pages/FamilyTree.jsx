@@ -318,13 +318,12 @@ export default function FamilyTree() {
           actions={
             <Link
               to="/family-members/add"
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary-700 sm:w-auto"
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary-700"
             >
               <UserPlus className="h-5 w-5" aria-hidden />
               Add Member
             </Link>
           }
-          actionsClassName="w-full sm:w-auto"
         />
       </div>
 

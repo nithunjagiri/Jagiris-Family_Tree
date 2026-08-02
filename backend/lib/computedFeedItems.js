@@ -144,7 +144,7 @@ async function buildComputedFeedItems(familyId, dismissedKeys = new Set()) {
       body: ev.description || `${ev.title} on ${formatShortDate(eventDate)}.`,
       entity_type: 'event',
       entity_id: ev.id,
-      link_path: '/events',
+      link_path: `/events/${ev.id}`,
       actor_user_id: null,
       read_at: null,
       created_at: `${eventDate}T09:00:00.000Z`,

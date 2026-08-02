@@ -2,7 +2,8 @@ import Breadcrumb from './Breadcrumb';
 import { cn } from '../lib/utils';
 
 /**
- * Standard module header: Back button + Home breadcrumb + optional description and actions.
+ * Standard module header: Back + breadcrumb (left) and actions (right) on one row;
+ * optional description full width below.
  * Back uses browser history unless `backTo` is set explicitly.
  */
 export default function ModulePageHeader({
@@ -14,23 +15,44 @@ export default function ModulePageHeader({
   className,
   breadcrumbClassName,
   actionsClassName,
+  /** When true, actions render on a second row on mobile (avoids overlap with dense toolbars). */
+  stackActionsOnMobile = false,
 }) {
   return (
-    <div className={cn('flex flex-col gap-3', className)}>
-      <div className="min-w-0">
-        <Breadcrumb
-          backTo={backTo}
-          items={[{ label: 'Home', to: '/' }, { label }]}
-          className={breadcrumbClassName}
-        />
-        {description ? (
-          <p className={cn('mt-2 max-w-2xl text-sm text-gray-600 dark:text-gray-400', descriptionClassName)}>
-            {description}
-          </p>
+    <div className={cn('flex flex-col gap-2', className)}>
+      <div
+        className={cn(
+          'flex gap-3',
+          stackActionsOnMobile
+            ? 'flex-col sm:flex-row sm:items-start sm:justify-between'
+            : 'items-start justify-between'
+        )}
+      >
+        <div className="min-w-0 flex-1">
+          <Breadcrumb
+            backTo={backTo}
+            items={[{ label: 'Home', to: '/' }, { label }]}
+            className={breadcrumbClassName}
+          />
+        </div>
+        {actions ? (
+          <div
+            className={cn(
+              'flex flex-wrap items-center justify-end gap-2',
+              stackActionsOnMobile
+                ? 'w-full sm:ml-auto sm:w-auto sm:shrink-0'
+                : 'ml-auto shrink-0',
+              actionsClassName
+            )}
+          >
+            {actions}
+          </div>
         ) : null}
       </div>
-      {actions ? (
-        <div className={cn('flex flex-wrap items-center gap-2', actionsClassName)}>{actions}</div>
+      {description ? (
+        <p className={cn('max-w-2xl text-sm text-gray-600 dark:text-gray-400', descriptionClassName)}>
+          {description}
+        </p>
       ) : null}
     </div>
   );

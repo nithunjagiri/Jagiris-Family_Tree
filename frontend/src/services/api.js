@@ -24,9 +24,8 @@ export function setActiveFamilyId(familyId) {
 }
 
 /**
- * Pick the shared family workspace for API headers: prefer the membership with the most
- * `member_count` (from `/api/account/families`), then name hints, then stable id order.
- * Falls back to name-only heuristics when counts are absent (older server).
+ * Pick the shared family workspace for API headers. Matches server `pickPrimaryFamily`:
+ * highest `member_count`, then lowest `family_id`. Name heuristics only when counts are absent.
  */
 export function resolveJagirisFamilyId(families) {
   const rows = Array.isArray(families) ? families : [];
@@ -35,20 +34,14 @@ export function resolveJagirisFamilyId(families) {
   const hasCounts = rows.some((f) => Number(f.member_count) > 0);
 
   if (hasCounts) {
-    const withCounts = rows.map((f) => ({
-      ...f,
-      member_count: Number(f.member_count) || 0,
-    }));
-    const maxC = Math.max(...withCounts.map((f) => f.member_count));
-    const candidates = withCounts.filter((f) => f.member_count === maxC);
-    if (candidates.length === 1) return Number(candidates[0].family_id);
-    const exact = candidates.find((f) => norm(f.name) === 'jagiris family');
-    if (exact) return Number(exact.family_id);
-    const fuzzy = candidates.find((f) => norm(f.name).includes('jagiris'));
-    if (fuzzy) return Number(fuzzy.family_id);
-    return Number(
-      candidates.slice().sort((a, b) => Number(a.family_id) - Number(b.family_id))[0].family_id
-    );
+    const primary = rows
+      .map((f) => ({ ...f, member_count: Number(f.member_count) || 0 }))
+      .slice()
+      .sort((a, b) => {
+        if (b.member_count !== a.member_count) return b.member_count - a.member_count;
+        return Number(a.family_id) - Number(b.family_id);
+      })[0];
+    return Number(primary.family_id);
   }
 
   const exact = rows.find((f) => norm(f.name) === 'jagiris family');
@@ -151,6 +144,7 @@ export const photosApi = {
 
 export const eventsApi = {
   list: (upcoming) => api.get('/events', { params: upcoming ? { upcoming: 'true' } : {} }),
+  get: (id) => api.get(`/events/${id}`),
   add: (data, imageFile) => {
     if (!imageFile) return api.post('/events', data);
     const form = new FormData();
@@ -160,6 +154,16 @@ export const eventsApi = {
     form.append('image', imageFile);
     return api.post('/events', form, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
+  update: (id, data, imageFile) => {
+    if (!imageFile) return api.put(`/events/${id}`, data);
+    const form = new FormData();
+    Object.entries(data).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') form.append(key, value);
+    });
+    form.append('image', imageFile);
+    return api.put(`/events/${id}`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+  delete: (id) => api.delete(`/events/${id}`),
 };
 
 export const familyTreeApi = {

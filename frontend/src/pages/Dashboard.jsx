@@ -44,6 +44,7 @@ import {
   bloodGroupBreakdown,
   yearFromDate,
 } from '../lib/dashboardAnalytics';
+import { scrollMainToElement } from '../lib/scrollMain';
 import { eventCalendarParts, parseCalendarYmd } from '../lib/calendarDate';
 
 const GENDER_COLORS = {
@@ -198,7 +199,7 @@ export default function Dashboard() {
       (location.hash === '#dashboard-announcements' ? 'dashboard-announcements' : null);
     if (!scrollTarget) return;
     requestAnimationFrame(() => {
-      document.getElementById(scrollTarget)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      scrollMainToElement(scrollTarget);
     });
   }, [loading, location.state?.scrollTo, location.hash]);
 
@@ -247,7 +248,8 @@ export default function Dashboard() {
           title: e.title || 'Event',
           subtitle: 'Event',
           description: e.description || null,
-          to: '/events',
+          to: `/events/${e.id}`,
+          event: e,
         };
       })
       .filter(Boolean);
@@ -318,7 +320,7 @@ export default function Dashboard() {
           label="Birthdays (60 days)"
           value={birthdaysSoon.length}
           hint="Upcoming celebrations"
-          onClick={() => document.getElementById('upcoming-events')?.scrollIntoView({ behavior: 'smooth' })}
+          onClick={() => scrollMainToElement('upcoming-events')}
           icon={Cake}
           accent="bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
         />
@@ -326,7 +328,7 @@ export default function Dashboard() {
           label="Members with blood group"
           value={bloodGroupStats.totalWithBloodGroup}
           hint={`${Math.max(0, membersCount - bloodGroupStats.totalWithBloodGroup)} pending blood group`}
-          onClick={() => document.getElementById('blood-groups-section')?.scrollIntoView({ behavior: 'smooth' })}
+          onClick={() => scrollMainToElement('blood-groups-section')}
           icon={Droplets}
           accent="bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400"
         />
@@ -649,25 +651,40 @@ export default function Dashboard() {
                 const evParts = eventCalendarParts(item.dateYmd);
                 return (
                 <li key={item.key} className="flex gap-4 px-5 py-4">
-                  <div className="flex w-10 shrink-0 flex-col items-center border-r border-gray-100 pr-4 dark:border-gray-800">
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-primary-600 dark:text-primary-400">
-                      {evParts?.monthShort ?? '—'}
-                    </span>
-                    <span className="text-xl font-bold tabular-nums text-gray-900 dark:text-white">
-                      {evParts?.day ?? '—'}
-                    </span>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-gray-900 dark:text-white">{item.title}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {item.subtitle} {evParts ? `· ${evParts.weekdayLong}, ${evParts.year}` : ''}
-                    </p>
-                    {item.description && (
-                      <p className="mt-1 line-clamp-2 text-sm text-gray-600 dark:text-gray-300">{item.description}</p>
-                    )}
-                  </div>
                   <Link
                     to={item.to}
+                    state={
+                      item.type === 'event'
+                        ? { returnTo: '/', event: item.event }
+                        : undefined
+                    }
+                    className="flex min-w-0 flex-1 gap-4"
+                  >
+                    <div className="flex w-10 shrink-0 flex-col items-center border-r border-gray-100 pr-4 dark:border-gray-800">
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-primary-600 dark:text-primary-400">
+                        {evParts?.monthShort ?? '—'}
+                      </span>
+                      <span className="text-xl font-bold tabular-nums text-gray-900 dark:text-white">
+                        {evParts?.day ?? '—'}
+                      </span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-gray-900 dark:text-white">{item.title}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {item.subtitle} {evParts ? `· ${evParts.weekdayLong}, ${evParts.year}` : ''}
+                      </p>
+                      {item.description && (
+                        <p className="mt-1 line-clamp-2 text-sm text-gray-600 dark:text-gray-300">{item.description}</p>
+                      )}
+                    </div>
+                  </Link>
+                  <Link
+                    to={item.to}
+                    state={
+                      item.type === 'event'
+                        ? { returnTo: '/', event: item.event }
+                        : undefined
+                    }
                     className="shrink-0 self-center rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
                   >
                     View

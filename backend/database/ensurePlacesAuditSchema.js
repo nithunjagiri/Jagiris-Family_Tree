@@ -107,6 +107,7 @@ async function ensurePlacesAuditSchema() {
 
   await db.query('ALTER TABLE events ADD COLUMN IF NOT EXISTS family_id INTEGER REFERENCES families(id) ON DELETE CASCADE');
   await db.query('ALTER TABLE events ADD COLUMN IF NOT EXISTS image_path TEXT');
+  await db.query('ALTER TABLE events ADD COLUMN IF NOT EXISTS created_by INTEGER REFERENCES users(id) ON DELETE SET NULL');
   await db.query('ALTER TABLE photos ADD COLUMN IF NOT EXISTS family_id INTEGER REFERENCES families(id) ON DELETE CASCADE');
   await db.query('ALTER TABLE places ADD COLUMN IF NOT EXISTS family_id INTEGER REFERENCES families(id) ON DELETE CASCADE');
 
@@ -257,6 +258,7 @@ async function ensurePlacesAuditSchema() {
 
   await db.query('CREATE INDEX IF NOT EXISTS idx_family_members_family_id ON family_members (family_id)');
   await db.query('CREATE INDEX IF NOT EXISTS idx_events_family_id ON events (family_id)');
+  await db.query('CREATE INDEX IF NOT EXISTS idx_events_created_by ON events (created_by)');
   await db.query('CREATE INDEX IF NOT EXISTS idx_photos_family_id ON photos (family_id)');
   await db.query('CREATE INDEX IF NOT EXISTS idx_places_family_id ON places (family_id)');
 

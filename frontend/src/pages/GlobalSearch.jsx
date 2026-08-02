@@ -112,7 +112,11 @@ export default function GlobalSearch() {
               <ul className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-200 bg-white dark:divide-gray-800 dark:border-gray-800 dark:bg-gray-900">
                 {(result.events || []).map((ev) => (
                   <li key={ev.id} className="px-4 py-3">
-                    <Link to="/events" className="font-medium text-primary-700 hover:underline dark:text-primary-300">
+                    <Link
+                      to={`/events/${ev.id}`}
+                      state={{ event: ev, returnTo: '/search' }}
+                      className="font-medium text-primary-700 hover:underline dark:text-primary-300"
+                    >
                       {ev.title}
                     </Link>
                     <p className="text-sm text-gray-500 dark:text-gray-400">

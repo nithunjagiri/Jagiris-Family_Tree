@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { notificationsApi } from '../services/api';
+import { accountApi, notificationsApi, resolveJagirisFamilyId, setActiveFamilyId } from '../services/api';
 import {
   isPushSupported,
   initPushNotifications,
@@ -20,6 +20,17 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
   const pushInitRef = useRef(false);
+
+  const bootstrapActiveFamily = useCallback(async () => {
+    try {
+      const res = await accountApi.listFamilies();
+      const rows = Array.isArray(res.data?.families) ? res.data.families : [];
+      const nextId = resolveJagirisFamilyId(rows);
+      if (nextId) setActiveFamilyId(nextId);
+    } catch (_) {
+      /* keep existing localStorage family id if refresh fails */
+    }
+  }, []);
 
   const registerPush = useCallback(async () => {
     if (!isPushSupported() || pushInitRef.current) return;
@@ -76,11 +87,18 @@ export function AuthProvider({ children }) {
     }
   }, [token, user, registerPush]);
 
+  // Resolve active family before module pages fetch scoped data
+  useEffect(() => {
+    if (!token || !user?.id) return;
+    bootstrapActiveFamily();
+  }, [token, user?.id, bootstrapActiveFamily]);
+
   const login = (newToken, newUser) => {
     setToken(newToken);
     setUser(newUser);
     localStorage.setItem(TOKEN_KEY, newToken);
     localStorage.setItem(USER_KEY, JSON.stringify(newUser));
+    bootstrapActiveFamily();
   };
 
   const logout = async () => {
