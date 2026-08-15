@@ -1,6 +1,6 @@
 const db = require('../database/db');
 const { logAudit } = require('../lib/auditLog');
-const { buildComputedFeedItems } = require('../lib/computedFeedItems');
+const { buildComputedFeedItems, FEED_INBOX_DAYS } = require('../lib/computedFeedItems');
 const { getDismissedFeedKeys, dismissFeedItem } = require('../lib/feedDismissals');
 const { sendToUsers } = require('../lib/fcmSender');
 const { scheduleInAppNotification } = require('../lib/inAppNotifications');
@@ -235,8 +235,9 @@ exports.listFeed = async (req, res, next) => {
       `SELECT COUNT(*)::int AS c FROM user_notifications un
        WHERE un.user_id = $1::integer
          AND un.family_id = ANY($2::integer[])
-         AND un.read_at IS NULL`,
-      [userId, familyIds]
+         AND un.read_at IS NULL
+         AND un.created_at >= NOW() - ($3::integer * INTERVAL '1 day')`,
+      [userId, familyIds, FEED_INBOX_DAYS]
     );
 
     const itemsResult = await db.query(
@@ -245,9 +246,10 @@ exports.listFeed = async (req, res, next) => {
        FROM user_notifications un
        WHERE un.user_id = $1::integer
          AND un.family_id = ANY($2::integer[])
+         AND un.created_at >= NOW() - ($4::integer * INTERVAL '1 day')
        ORDER BY un.created_at DESC
        LIMIT $3`,
-      [userId, familyIds, limit]
+      [userId, familyIds, limit, FEED_INBOX_DAYS]
     );
 
     const stored = itemsResult.rows.map((row) => ({

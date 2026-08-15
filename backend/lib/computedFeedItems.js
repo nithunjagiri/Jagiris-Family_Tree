@@ -2,7 +2,9 @@ const db = require('../database/db');
 const { todayYmdInTimeZone, addCalendarDays, normalizeCalendarYmd } = require('./calendarDate');
 
 const DEFAULT_TZ = 'Asia/Kolkata';
-const UPCOMING_DAYS = 60;
+/** Bell inbox: stored rows and live upcoming cards share this window. */
+const FEED_INBOX_DAYS = 7;
+const UPCOMING_DAYS = FEED_INBOX_DAYS;
 
 function memberDisplayName(row) {
   return [row.name, row.surname].filter(Boolean).join(' ').trim() || row.name || 'Member';
@@ -157,4 +159,4 @@ async function buildComputedFeedItems(familyId, dismissedKeys = new Set()) {
   return items.slice(0, 40);
 }
 
-module.exports = { buildComputedFeedItems, UPCOMING_DAYS };
+module.exports = { buildComputedFeedItems, UPCOMING_DAYS, FEED_INBOX_DAYS };
