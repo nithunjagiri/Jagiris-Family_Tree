@@ -24,7 +24,7 @@
   }
 
   #root {
-    @apply h-full;
+    @apply h-full overflow-hidden;
   }
 }
 
@@ -46,8 +46,21 @@
     touch-action: manipulation;
   }
 
+  /* Viewport-bounded scrollport for auth/legal pages. html/body/#root are overflow:hidden. */
   .standalone-page {
-    @apply min-h-full overflow-y-auto overscroll-y-contain;
+    box-sizing: border-box;
+    height: 100%;
+    max-height: 100dvh;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+  }
+
+  html.native-app .standalone-page {
+    max-height: 100%;
   }
 
   .scroll-touch {

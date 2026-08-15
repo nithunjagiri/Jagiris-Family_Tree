@@ -4,15 +4,31 @@ import { AuthBranding } from '../components/AuthBranding';
 import { useAuth } from '../context/AuthContext';
 
 const APP_NAME = "Jagiri's Kutumbam";
-const EFFECTIVE_DATE = '21 June 2026';
+const EFFECTIVE_DATE = '15 August 2026';
 
+/** Same administrator defaults as Contact Us; override with VITE_* in `.env` if needed. */
 const DEFAULT_CONTACT = {
   name: 'Nithun Jagiri',
   email: 'nithun018@gmail.com',
+  mobile: '8247369705',
 };
 
 const contactName = import.meta.env.VITE_CONTACT_ADMIN_NAME || DEFAULT_CONTACT.name;
 const contactEmail = (import.meta.env.VITE_CONTACT_EMAIL || DEFAULT_CONTACT.email).trim();
+const contactMobile = (import.meta.env.VITE_CONTACT_PHONE || DEFAULT_CONTACT.mobile).replace(/\D/g, '');
+
+function telIndia(digits) {
+  const d = String(digits).replace(/\D/g, '');
+  if (d.length === 10) return `+91${d}`;
+  if (d.startsWith('91') && d.length === 12) return `+${d}`;
+  return d ? `+${d}` : '';
+}
+
+function formatMobileDisplay(digits) {
+  const d = String(digits).replace(/\D/g, '');
+  if (d.length === 10) return `+91 ${d.slice(0, 5)} ${d.slice(5)}`;
+  return digits;
+}
 
 function Section({ title, children }) {
   return (
@@ -29,9 +45,11 @@ export default function PrivacyPolicy() {
   const privacyMail = contactEmail
     ? `mailto:${contactEmail.toLowerCase()}?subject=${encodeURIComponent(`${APP_NAME} — Privacy inquiry`)}`
     : null;
+  const privacyTel = contactMobile ? `tel:${telIndia(contactMobile)}` : null;
+  const privacyPhoneLabel = contactMobile ? formatMobileDisplay(contactMobile) : '';
 
   return (
-    <div className="standalone-page min-h-full bg-gray-50 px-4 py-10 dark:bg-gray-950">
+    <div className="standalone-page bg-gray-50 px-4 py-10 pb-safe dark:bg-gray-950">
       <div className="mx-auto w-full max-w-3xl">
         <AuthBranding />
 
@@ -114,7 +132,12 @@ export default function PrivacyPolicy() {
                 {APP_NAME} is designed for a private family workspace. Information you add is generally visible to
                 other members of your shared family group according to app permissions and any profile privacy level
                 set on a member record. Administrators may have additional access to manage users and review audit
-                activity. We do not sell your personal information.
+                activity.
+              </p>
+              <p>
+                We do not sell your personal information. We do not use advertising SDKs and we do not sell data to
+                advertisers. Sharing is limited to other members of the same family workspace (by design), the
+                processors listed under Third-party services, and disclosures required by law.
               </p>
             </Section>
 
@@ -146,9 +169,13 @@ export default function PrivacyPolicy() {
             <Section title="Data retention">
               <p>
                 We retain account and family data for as long as your account is active and as needed to provide the
-                service. You may export family member data from the Account &amp; privacy section. You may request
-                account deletion from the same section; deletion removes your account and associated access according
-                to our backend processes.
+                service. You may export family member data from the Account &amp; privacy section.
+              </p>
+              <p>
+                You may delete your account from Account &amp; privacy. Account deletion removes your login and
+                associated account data. Family records that other members added to the shared workspace may remain
+                until an administrator removes them. You may also email the contact address on this page to request
+                deletion.
               </p>
             </Section>
 
@@ -171,9 +198,13 @@ export default function PrivacyPolicy() {
 
             <Section title="Children">
               <p>
-                The app is intended for use by family members with authorized accounts. If you believe a child has
-                provided personal information without appropriate consent, please contact us so we can review the
-                request.
+                App accounts are for authorized adult users. Children should not create their own accounts. Family
+                members may add a child&apos;s name, date of birth, and photos as part of family records. That
+                information is stored only in the private family workspace and is not used for advertising.
+              </p>
+              <p>
+                To correct or remove a child&apos;s record, use the app (member or administrator tools) or contact us
+                using the email or phone number on this page.
               </p>
             </Section>
 
@@ -186,16 +217,27 @@ export default function PrivacyPolicy() {
 
             <Section title="Contact us">
               <p>
-                For privacy questions or requests regarding your data, contact{' '}
-                {privacyMail ? (
-                  <a href={privacyMail} className="font-medium text-primary-600 hover:underline dark:text-primary-400">
-                    {contactName} ({contactEmail})
-                  </a>
-                ) : (
-                  <span>{contactName}</span>
-                )}
-                . You can also use the in-app Contact page after signing in.
+                For privacy questions or requests regarding your data, contact {contactName}:
               </p>
+              <ul className="list-inside list-disc space-y-1 pl-1">
+                {privacyMail ? (
+                  <li>
+                    Email:{' '}
+                    <a href={privacyMail} className="font-medium text-primary-600 hover:underline dark:text-primary-400">
+                      {contactEmail}
+                    </a>
+                  </li>
+                ) : null}
+                {privacyTel ? (
+                  <li>
+                    Phone:{' '}
+                    <a href={privacyTel} className="font-medium text-primary-600 hover:underline dark:text-primary-400">
+                      {privacyPhoneLabel}
+                    </a>
+                  </li>
+                ) : null}
+              </ul>
+              <p>You can also use the in-app Contact page after signing in.</p>
             </Section>
           </div>
 
