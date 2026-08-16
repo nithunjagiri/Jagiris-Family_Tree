@@ -46,6 +46,9 @@ import {
 } from '../lib/dashboardAnalytics';
 import { scrollMainToElement } from '../lib/scrollMain';
 import { eventCalendarParts, parseCalendarYmd } from '../lib/calendarDate';
+import { birthdayWishText, familyCelebrationText, formatEventDateLabel, senderDisplayName } from '../lib/wishMessages';
+import WishActions from '../components/WishActions';
+import ShareOccasionButton from '../components/ShareOccasionButton';
 
 const GENDER_COLORS = {
   male: '#2563eb',
@@ -234,6 +237,7 @@ export default function Dashboard() {
         subtitle: 'Birthday',
         description: null,
         to: `/family-members/${member.id}`,
+        member,
       };
     });
 
@@ -678,17 +682,36 @@ export default function Dashboard() {
                       )}
                     </div>
                   </Link>
-                  <Link
-                    to={item.to}
-                    state={
-                      item.type === 'event'
-                        ? { returnTo: '/', event: item.event }
-                        : undefined
-                    }
-                    className="shrink-0 self-center rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-                  >
-                    View
-                  </Link>
+                  <div className="flex shrink-0 flex-col items-end justify-center gap-1.5 self-center">
+                    {item.type === 'birthday' && item.member ? (
+                      <WishActions
+                        compact
+                        member={item.member}
+                        message={birthdayWishText(item.title, senderDisplayName(user))}
+                      />
+                    ) : null}
+                    {item.type === 'event' && item.event ? (
+                      <ShareOccasionButton
+                        compact
+                        title={item.title}
+                        text={familyCelebrationText(
+                          `${item.title} — ${formatEventDateLabel(item.dateYmd)}`,
+                          senderDisplayName(user)
+                        )}
+                      />
+                    ) : null}
+                    <Link
+                      to={item.to}
+                      state={
+                        item.type === 'event'
+                          ? { returnTo: '/', event: item.event }
+                          : undefined
+                      }
+                      className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                    >
+                      View
+                    </Link>
+                  </div>
                 </li>
                 );
               })

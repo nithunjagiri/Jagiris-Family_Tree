@@ -12,6 +12,8 @@ import { getNavigationOriginPath } from '../lib/navigationOrigin';
 import ModulePageHeader from '../components/ModulePageHeader';
 import EventForm from '../components/EventForm';
 import PhotoLightbox from '../components/PhotoLightbox';
+import ShareOccasionButton from '../components/ShareOccasionButton';
+import { eventShareText, formatEventDateLabel, senderDisplayName } from '../lib/wishMessages';
 
 function seedEventFromState(stateEvent, paramId) {
   if (!stateEvent || paramId == null) return null;
@@ -141,6 +143,17 @@ export default function EventDetail() {
         label="Event details"
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            {!editing ? (
+              <ShareOccasionButton
+                title={event.title}
+                text={eventShareText({
+                  title: event.title,
+                  date: formatEventDateLabel(event.event_date),
+                  description: event.description,
+                  senderName: senderDisplayName(user),
+                })}
+              />
+            ) : null}
             {showEdit && !editing && (
               <button
                 type="button"

@@ -7,17 +7,32 @@ import { HIDE_RELATION_NAMES_IN_UI } from '../lib/appDisplaySettings';
 import { resolveBackendPublicUrl } from '../lib/backendOrigin';
 import { useAppBackNavigation } from '../hooks/useAppBackNavigation';
 import { getNavigationOriginPath } from '../lib/navigationOrigin';
+import { useAuth } from '../context/AuthContext';
+import { toTelE164, whatsAppHref } from '../lib/phoneLinks';
+import { memberWishText, senderDisplayName } from '../lib/wishMessages';
+import WishActions from '../components/WishActions';
 
 const ProfileMiniMap = lazy(() => import('../components/ProfileMiniMap'));
 
-function Field({ icon: Icon, label, value }) {
+function Field({ icon: Icon, label, value, href }) {
   if (value == null || value === '') return null;
   return (
     <div className="flex gap-3">
       <Icon className="mt-0.5 h-5 w-5 shrink-0 text-primary-500" />
       <div>
         <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{label}</p>
-        <p className="text-gray-900 dark:text-white">{value}</p>
+        {href ? (
+          <a
+            href={href}
+            target={href.startsWith('http') ? '_blank' : undefined}
+            rel={href.startsWith('http') ? 'noopener noreferrer' : undefined}
+            className="font-medium text-primary-600 hover:underline dark:text-primary-400"
+          >
+            {value}
+          </a>
+        ) : (
+          <p className="text-gray-900 dark:text-white">{value}</p>
+        )}
       </div>
     </div>
   );
@@ -31,6 +46,7 @@ function spouseDisplayName(s) {
 export default function MemberProfile() {
   const { id } = useParams();
   const location = useLocation();
+  const { user } = useAuth();
   const handleBack = useAppBackNavigation();
   const returnTo = location.state?.returnTo || getNavigationOriginPath() || null;
   const [member, setMember] = useState(null);
@@ -107,6 +123,10 @@ export default function MemberProfile() {
   const fullName = [member.name, member.surname].filter(Boolean).join(' ') || member.name;
   const birthPlace = member.birth_place_name || member.birth_place || null;
   const currentCity = member.residence_place_name || member.residence_place || null;
+  const wishText = memberWishText(member, senderDisplayName(user));
+  const phoneTel = toTelE164(member.phone);
+  const phoneLink = phoneTel ? `tel:${phoneTel}` : null;
+  const waLink = whatsAppHref(member.whatsapp_number);
 
   return (
     <div className="w-full max-w-none">
@@ -149,6 +169,9 @@ export default function MemberProfile() {
               {!HIDE_RELATION_NAMES_IN_UI && member.relation ? (
                 <p className="text-primary-600 dark:text-primary-400">{member.relation}</p>
               ) : null}
+              <div className="mt-4 flex justify-center sm:justify-start">
+                <WishActions member={member} message={wishText} />
+              </div>
             </div>
             {member.birth_place_lat && member.birth_place_lng && (
               <Suspense fallback={<div className="h-28 w-36 animate-pulse rounded-xl bg-gray-200 dark:bg-gray-700 sm:h-32 sm:w-40" />}>
@@ -193,8 +216,8 @@ export default function MemberProfile() {
             <Field icon={Calendar} label="Date of birth" value={member.date_of_birth ? formatCalendarLong(member.date_of_birth) : null} />
             <Field icon={Calendar} label="Date of death" value={member.date_of_death ? formatCalendarLong(member.date_of_death) : null} />
             <Field icon={Calendar} label="Anniversary date" value={member.anniversary_date ? formatCalendarLong(member.anniversary_date) : null} />
-            <Field icon={Phone} label="Phone" value={member.phone} />
-            <Field icon={MessageCircle} label="WhatsApp number" value={member.whatsapp_number} />
+            <Field icon={Phone} label="Phone" value={member.phone} href={phoneLink} />
+            <Field icon={MessageCircle} label="WhatsApp number" value={member.whatsapp_number} href={waLink} />
             <Field icon={Mail} label="Email" value={member.email} />
             <Field icon={MapPin} label="Birth place" value={birthPlace} />
             <Field icon={MapPin} label="Current Place" value={currentCity} />
