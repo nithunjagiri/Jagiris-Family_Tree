@@ -1,7 +1,6 @@
 import { addCalendarDays, formatCalendarLong, parseCalendarYmd, todayYmdInTimeZone } from './calendarDate';
 
 const SIGNATURE_ORG = "Jagiri's Kutumbam";
-const SOON_DAYS = 60;
 
 export function senderDisplayName(user) {
   const first = String(user?.first_name ?? '').trim();
@@ -34,12 +33,32 @@ function nextOccurrenceYmd(dateValue, todayYmd) {
   return nextYmd;
 }
 
-function isSoon(dateValue, withinDays = SOON_DAYS) {
+/**
+ * Recurring month-day (birthday / anniversary) vs IST today.
+ * @returns {'today' | 'tomorrow' | null}
+ */
+export function recurringOccasionTiming(dateValue) {
   const todayYmd = todayYmdInTimeZone('Asia/Kolkata');
-  const endYmd = addCalendarDays(todayYmd, withinDays);
+  const tomorrowYmd = addCalendarDays(todayYmd, 1);
   const nextYmd = nextOccurrenceYmd(dateValue, todayYmd);
-  if (!todayYmd || !endYmd || !nextYmd) return false;
-  return nextYmd >= todayYmd && nextYmd <= endYmd;
+  if (!todayYmd || !nextYmd) return null;
+  if (nextYmd === todayYmd) return 'today';
+  if (tomorrowYmd && nextYmd === tomorrowYmd) return 'tomorrow';
+  return null;
+}
+
+/**
+ * One-shot calendar date (events) vs IST today.
+ * @returns {'today' | 'tomorrow' | null}
+ */
+export function absoluteOccasionTiming(dateValue) {
+  const todayYmd = todayYmdInTimeZone('Asia/Kolkata');
+  const tomorrowYmd = addCalendarDays(todayYmd, 1);
+  const p = parseCalendarYmd(dateValue);
+  if (!p || !todayYmd) return null;
+  if (p.ymd === todayYmd) return 'today';
+  if (tomorrowYmd && p.ymd === tomorrowYmd) return 'tomorrow';
+  return null;
 }
 
 function withSignature(body, senderName) {
@@ -54,6 +73,13 @@ export function birthdayWishText(name, senderName) {
   );
 }
 
+export function advanceBirthdayWishText(name, senderName) {
+  return withSignature(
+    `Advance Happy Birthday, ${name}! 🎉\nWishing you a beautiful day tomorrow filled with happiness, good health, and wonderful memories. May the year ahead bring you lots of joy! ❤️`,
+    senderName
+  );
+}
+
 export function anniversaryWishText(name, senderName) {
   return withSignature(
     `Happy Anniversary, ${name}! ❤️🎉\nWishing you both a lifetime of love, happiness, togetherness, and beautiful memories.`,
@@ -61,17 +87,9 @@ export function anniversaryWishText(name, senderName) {
   );
 }
 
-export function generalWishText(name, senderName, extraMessage = '') {
-  const extra = String(extraMessage || '').trim();
-  const body = extra
-    ? `Hi ${name}! 👋\nWe're happy to have you as a part of Jagiri's Kutumbam ❤️\n${extra}`
-    : `Hi ${name}! 👋\nWe're happy to have you as a part of Jagiri's Kutumbam ❤️`;
-  return withSignature(body, senderName);
-}
-
-export function condolenceWishText(name, senderName) {
+export function advanceAnniversaryWishText(name, senderName) {
   return withSignature(
-    `With heartfelt remembrance 🕊️\n\nWe remember ${name} with love and respect. Their memories will always remain a cherished part of our family.`,
+    `Advance Happy Anniversary, ${name}! ❤️🎉\nWishing you both a lifetime of love, happiness, and togetherness as you celebrate tomorrow.`,
     senderName
   );
 }
@@ -86,38 +104,75 @@ export function eventShareText({ title, date, description, senderName }) {
   return withSignature(lines.join('\n'), senderName);
 }
 
-export function familyCelebrationText(message, senderName) {
-  const extra = String(message || '').trim();
-  const body = extra
-    ? `🎉 A special moment for Jagiri's Kutumbam!\n\n${extra}\n\nLet's come together and make this occasion memorable. ❤️`
-    : `🎉 A special moment for Jagiri's Kutumbam!\n\nLet's come together and make this occasion memorable. ❤️`;
-  return withSignature(body, senderName);
+export function advanceEventShareText({ title, date, description, senderName }) {
+  const desc = String(description || '').trim();
+  const lines = [`📅 ${title || 'Family event'} is tomorrow`, `Date: ${date || ''}`];
+  if (desc) {
+    lines.push('', desc);
+  }
+  lines.push('', 'Looking forward to celebrating this special occasion together! ❤️');
+  return withSignature(lines.join('\n'), senderName);
 }
 
-/** @typedef {'condolence' | 'birthday' | 'anniversary' | 'general'} MemberWishKind */
+export function eventShareTextForTiming(event, senderName, timing) {
+  const payload = {
+    title: event?.title,
+    date: formatEventDateLabel(event?.event_date || event?.dateYmd),
+    description: event?.description,
+    senderName,
+  };
+  return timing === 'tomorrow' ? advanceEventShareText(payload) : eventShareText(payload);
+}
+
+export function birthdayWishTextForTiming(name, senderName, timing) {
+  return timing === 'tomorrow' ? advanceBirthdayWishText(name, senderName) : birthdayWishText(name, senderName);
+}
+
+export function anniversaryWishTextForTiming(name, senderName, timing) {
+  return timing === 'tomorrow'
+    ? advanceAnniversaryWishText(name, senderName)
+    : anniversaryWishText(name, senderName);
+}
+
+/** @typedef {'birthday' | 'birthday_advance' | 'anniversary' | 'anniversary_advance' | null} MemberWishKind */
 
 /**
+ * Today’s occasion wins over tomorrow’s if both apply.
  * @param {Record<string, unknown> | null | undefined} member
  * @returns {MemberWishKind}
  */
 export function pickMemberWishKind(member) {
-  if (isMemberDeceased(member)) return 'condolence';
-  if (isSoon(member?.date_of_birth)) return 'birthday';
-  if (isSoon(member?.anniversary_date)) return 'anniversary';
-  return 'general';
+  if (!member || isMemberDeceased(member)) return null;
+  const b = recurringOccasionTiming(member.date_of_birth);
+  const a = recurringOccasionTiming(member.anniversary_date);
+  if (b === 'today') return 'birthday';
+  if (a === 'today') return 'anniversary';
+  if (b === 'tomorrow') return 'birthday_advance';
+  if (a === 'tomorrow') return 'anniversary_advance';
+  return null;
+}
+
+export function shouldShowMemberWish(member) {
+  return pickMemberWishKind(member) != null;
+}
+
+export function shouldShowEventShare(eventDate) {
+  return absoluteOccasionTiming(eventDate) != null;
 }
 
 export function memberWishText(member, senderName) {
   const name = memberDisplayName(member);
   switch (pickMemberWishKind(member)) {
-    case 'condolence':
-      return condolenceWishText(name, senderName);
     case 'birthday':
       return birthdayWishText(name, senderName);
+    case 'birthday_advance':
+      return advanceBirthdayWishText(name, senderName);
     case 'anniversary':
       return anniversaryWishText(name, senderName);
+    case 'anniversary_advance':
+      return advanceAnniversaryWishText(name, senderName);
     default:
-      return generalWishText(name, senderName);
+      return '';
   }
 }
 

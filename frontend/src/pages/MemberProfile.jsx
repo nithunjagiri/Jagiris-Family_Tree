@@ -9,7 +9,7 @@ import { useAppBackNavigation } from '../hooks/useAppBackNavigation';
 import { getNavigationOriginPath } from '../lib/navigationOrigin';
 import { useAuth } from '../context/AuthContext';
 import { toTelE164, whatsAppHref } from '../lib/phoneLinks';
-import { memberWishText, senderDisplayName } from '../lib/wishMessages';
+import { memberWishText, senderDisplayName, shouldShowMemberWish } from '../lib/wishMessages';
 import WishActions from '../components/WishActions';
 
 const ProfileMiniMap = lazy(() => import('../components/ProfileMiniMap'));
@@ -124,6 +124,7 @@ export default function MemberProfile() {
   const birthPlace = member.birth_place_name || member.birth_place || null;
   const currentCity = member.residence_place_name || member.residence_place || null;
   const wishText = memberWishText(member, senderDisplayName(user));
+  const showWish = shouldShowMemberWish(member);
   const phoneTel = toTelE164(member.phone);
   const phoneLink = phoneTel ? `tel:${phoneTel}` : null;
   const waLink = whatsAppHref(member.whatsapp_number);
@@ -169,9 +170,11 @@ export default function MemberProfile() {
               {!HIDE_RELATION_NAMES_IN_UI && member.relation ? (
                 <p className="text-primary-600 dark:text-primary-400">{member.relation}</p>
               ) : null}
-              <div className="mt-4 flex justify-center sm:justify-start">
-                <WishActions member={member} message={wishText} />
-              </div>
+              {showWish ? (
+                <div className="mt-4 flex justify-center sm:justify-start">
+                  <WishActions member={member} message={wishText} />
+                </div>
+              ) : null}
             </div>
             {member.birth_place_lat && member.birth_place_lng && (
               <Suspense fallback={<div className="h-28 w-36 animate-pulse rounded-xl bg-gray-200 dark:bg-gray-700 sm:h-32 sm:w-40" />}>

@@ -13,7 +13,7 @@ import ModulePageHeader from '../components/ModulePageHeader';
 import EventForm from '../components/EventForm';
 import PhotoLightbox from '../components/PhotoLightbox';
 import ShareOccasionButton from '../components/ShareOccasionButton';
-import { eventShareText, formatEventDateLabel, senderDisplayName } from '../lib/wishMessages';
+import { eventShareTextForTiming, senderDisplayName, shouldShowEventShare, absoluteOccasionTiming } from '../lib/wishMessages';
 
 function seedEventFromState(stateEvent, paramId) {
   if (!stateEvent || paramId == null) return null;
@@ -136,6 +136,8 @@ export default function EventDetail() {
   const showEdit = canEditEvent(event, user);
   const showDelete = canDeleteEvent(event, user);
   const upcoming = isEventUpcoming(event.event_date);
+  const eventShareTiming = absoluteOccasionTiming(event.event_date);
+  const showEventShare = shouldShowEventShare(event.event_date);
 
   return (
     <div className="space-y-6 pb-safe">
@@ -143,15 +145,10 @@ export default function EventDetail() {
         label="Event details"
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {!editing ? (
+            {!editing && showEventShare ? (
               <ShareOccasionButton
                 title={event.title}
-                text={eventShareText({
-                  title: event.title,
-                  date: formatEventDateLabel(event.event_date),
-                  description: event.description,
-                  senderName: senderDisplayName(user),
-                })}
+                text={eventShareTextForTiming(event, senderDisplayName(user), eventShareTiming)}
               />
             ) : null}
             {showEdit && !editing && (

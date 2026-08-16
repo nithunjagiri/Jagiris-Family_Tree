@@ -93,12 +93,13 @@ export function livingCounts(members) {
 }
 
 /**
- * Members with DOB in the next `withinDays` days (calendar in Asia/Kolkata), excluding deceased.
+ * Members with a recurring month-day date in the next `withinDays` days (IST), excluding deceased.
  * @param {Array<Record<string, unknown>>} members
+ * @param {string} dateField
  * @param {number} withinDays
  * @returns {{ member: Record<string, unknown>; nextYmd: string }[]}
  */
-export function upcomingBirthdays(members, withinDays = 60) {
+function upcomingByMonthDay(members, dateField, withinDays = 60) {
   const todayYmd = todayYmdInTimeZone('Asia/Kolkata');
   const endYmd = addCalendarDays(todayYmd, withinDays);
   if (!todayYmd || !endYmd) return [];
@@ -107,7 +108,7 @@ export function upcomingBirthdays(members, withinDays = 60) {
   const out = [];
   for (const m of members) {
     if (isDeceased(m)) continue;
-    const p = parseCalendarYmd(m.date_of_birth);
+    const p = parseCalendarYmd(m[dateField]);
     if (!p) continue;
     const md = p.ymd.slice(5);
     let nextYmd = `${ty}-${md}`;
@@ -118,6 +119,51 @@ export function upcomingBirthdays(members, withinDays = 60) {
   }
   out.sort((a, b) => a.nextYmd.localeCompare(b.nextYmd));
   return out;
+}
+
+/**
+ * Members with DOB in the next `withinDays` days (calendar in Asia/Kolkata), excluding deceased.
+ * @param {Array<Record<string, unknown>>} members
+ * @param {number} withinDays
+ * @returns {{ member: Record<string, unknown>; nextYmd: string }[]}
+ */
+export function upcomingBirthdays(members, withinDays = 60) {
+  return upcomingByMonthDay(members, 'date_of_birth', withinDays);
+}
+
+/**
+ * @param {Array<Record<string, unknown>>} members
+ * @param {number} withinDays
+ * @returns {{ member: Record<string, unknown>; nextYmd: string }[]}
+ */
+export function upcomingAnniversaries(members, withinDays = 60) {
+  return upcomingByMonthDay(members, 'anniversary_date', withinDays);
+}
+
+/**
+ * @param {Array<Record<string, unknown>>} members
+ * @param {number} withinDays
+ * @returns {{ key: string; type: 'birthday' | 'anniversary'; member: Record<string, unknown>; nextYmd: string; title: string }[]}
+ */
+export function upcomingFamilyDates(members, withinDays = 60) {
+  const displayName = (m) => [m.name, m.surname].filter(Boolean).join(' ') || m.name || 'Member';
+  const birthdays = upcomingBirthdays(members, withinDays).map(({ member, nextYmd }) => ({
+    key: `b-${member.id}-${nextYmd}`,
+    type: 'birthday',
+    member,
+    nextYmd,
+    title: displayName(member),
+  }));
+  const anniversaries = upcomingAnniversaries(members, withinDays).map(({ member, nextYmd }) => ({
+    key: `a-${member.id}-${nextYmd}`,
+    type: 'anniversary',
+    member,
+    nextYmd,
+    title: displayName(member),
+  }));
+  return [...birthdays, ...anniversaries].sort(
+    (a, b) => a.nextYmd.localeCompare(b.nextYmd) || a.title.localeCompare(b.title)
+  );
 }
 
 /**

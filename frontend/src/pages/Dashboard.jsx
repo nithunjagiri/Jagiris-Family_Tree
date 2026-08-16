@@ -46,7 +46,7 @@ import {
 } from '../lib/dashboardAnalytics';
 import { scrollMainToElement } from '../lib/scrollMain';
 import { eventCalendarParts, parseCalendarYmd } from '../lib/calendarDate';
-import { birthdayWishText, familyCelebrationText, formatEventDateLabel, senderDisplayName } from '../lib/wishMessages';
+import { birthdayWishTextForTiming, eventShareTextForTiming, senderDisplayName, absoluteOccasionTiming } from '../lib/wishMessages';
 import WishActions from '../components/WishActions';
 import ShareOccasionButton from '../components/ShareOccasionButton';
 
@@ -639,7 +639,7 @@ export default function Dashboard() {
               <h2 className="text-base font-semibold text-gray-900 dark:text-white">Upcoming events & birthdays</h2>
             </div>
             <Link
-              to="/events"
+              to="/events?tab=birthdays"
               className="text-sm font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400"
             >
               View all
@@ -653,6 +653,7 @@ export default function Dashboard() {
             ) : (
               upcomingTimeline.map((item) => {
                 const evParts = eventCalendarParts(item.dateYmd);
+                const occasionTiming = absoluteOccasionTiming(item.dateYmd);
                 return (
                 <li key={item.key} className="flex gap-4 px-5 py-4">
                   <Link
@@ -683,20 +684,25 @@ export default function Dashboard() {
                     </div>
                   </Link>
                   <div className="flex shrink-0 flex-col items-end justify-center gap-1.5 self-center">
-                    {item.type === 'birthday' && item.member ? (
+                    {item.type === 'birthday' && item.member && occasionTiming ? (
                       <WishActions
                         compact
                         member={item.member}
-                        message={birthdayWishText(item.title, senderDisplayName(user))}
+                        message={birthdayWishTextForTiming(
+                          item.title,
+                          senderDisplayName(user),
+                          occasionTiming
+                        )}
                       />
                     ) : null}
-                    {item.type === 'event' && item.event ? (
+                    {item.type === 'event' && item.event && occasionTiming ? (
                       <ShareOccasionButton
                         compact
                         title={item.title}
-                        text={familyCelebrationText(
-                          `${item.title} — ${formatEventDateLabel(item.dateYmd)}`,
-                          senderDisplayName(user)
+                        text={eventShareTextForTiming(
+                          item.event,
+                          senderDisplayName(user),
+                          occasionTiming
                         )}
                       />
                     ) : null}
