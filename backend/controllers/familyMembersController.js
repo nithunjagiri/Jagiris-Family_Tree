@@ -2,10 +2,11 @@ const db = require('../database/db');
 const { body, validationResult } = require('express-validator');
 const { logAudit } = require('../lib/auditLog');
 const { scheduleInAppNotification } = require('../lib/inAppNotifications');
+const { listLinkableUsers } = require('../lib/chatService');
 const { useCloudinary } = require('../middleware/upload');
 
 const COLS =
-  'fm.id, fm.family_id, fm.name, fm.surname, fm.relation, fm.date_of_birth, fm.phone, fm.whatsapp_number, fm.profile_photo, fm.father_id, fm.mother_id, fm.spouse_id, fm.gender, fm.email, fm.birth_place, fm.birth_place_id, fm.residence_place_id, fm.residence_place, fm.created_by, fm.updated_by, fm.occupation, fm.notes, fm.date_of_death, fm.is_alive, fm.education_level, fm.educational_qualification, fm.marital_status, fm.anniversary_date, fm.blood_group, fm.emergency_contact_name, fm.emergency_contact_phone, fm.privacy_level, fm.preferred_language, fm.biography, fm.instagram_id, fm.facebook_id, fm.created_at, fm.updated_at, pb.name AS birth_place_name, pb.latitude AS birth_place_lat, pb.longitude AS birth_place_lng, rp.name AS residence_place_name, uc.username AS created_by_username, uu.username AS updated_by_username';
+  'fm.id, fm.family_id, fm.name, fm.surname, fm.relation, fm.date_of_birth, fm.phone, fm.whatsapp_number, fm.profile_photo, fm.father_id, fm.mother_id, fm.spouse_id, fm.gender, fm.email, fm.birth_place, fm.birth_place_id, fm.residence_place_id, fm.residence_place, fm.created_by, fm.updated_by, fm.occupation, fm.notes, fm.date_of_death, fm.is_alive, fm.education_level, fm.educational_qualification, fm.marital_status, fm.anniversary_date, fm.blood_group, fm.emergency_contact_name, fm.emergency_contact_phone, fm.privacy_level, fm.preferred_language, fm.biography, fm.instagram_id, fm.facebook_id, fm.linked_user_id, fm.created_at, fm.updated_at, pb.name AS birth_place_name, pb.latitude AS birth_place_lat, pb.longitude AS birth_place_lng, rp.name AS residence_place_name, uc.username AS created_by_username, uu.username AS updated_by_username, lu.username AS linked_username';
 
 function normalizeIsAlive(body) {
   const raw = body?.is_alive;
@@ -63,6 +64,7 @@ exports.validateMember = [
   body('father_id').optional({ checkFalsy: true }).isInt({ min: 1 }).withMessage('Invalid father_id').toInt(),
   body('mother_id').optional({ checkFalsy: true }).isInt({ min: 1 }).withMessage('Invalid mother_id').toInt(),
   body('spouse_id').optional({ checkFalsy: true }).isInt({ min: 1 }).withMessage('Invalid spouse_id').toInt(),
+  body('linked_user_id').optional({ checkFalsy: true }).isInt({ min: 1 }).withMessage('Invalid linked_user_id').toInt(),
 ];
 
 async function selectMemberById(clientOrDb, id, familyId) {
@@ -73,6 +75,7 @@ async function selectMemberById(clientOrDb, id, familyId) {
      LEFT JOIN places rp ON rp.id::text = NULLIF(TRIM(fm.residence_place_id::text), '') AND rp.family_id = fm.family_id
      LEFT JOIN users uc ON uc.id::text = NULLIF(TRIM(fm.created_by::text), '')
      LEFT JOIN users uu ON uu.id::text = NULLIF(TRIM(fm.updated_by::text), '')
+     LEFT JOIN users lu ON lu.id = fm.linked_user_id
      WHERE fm.id = $1 AND fm.family_id = $2`,
     [id, familyId]
   );
@@ -99,6 +102,25 @@ async function validateFamilyRelations(client, { familyId, memberId, fatherId, m
   await assertLinkedMemberInFamily(client, spouseId, familyId, 'spouse_id', memberId);
 }
 
+async function validateLinkedUser(client, linkedUserId, familyId, memberId) {
+  if (linkedUserId == null || linkedUserId === '') return null;
+  const uid = Number(linkedUserId);
+  if (!Number.isInteger(uid) || uid <= 0) throw new Error('Invalid linked app account');
+  const mem = await client.query(
+    'SELECT 1 FROM family_memberships WHERE user_id = $1 AND family_id = $2',
+    [uid, familyId]
+  );
+  if (!mem.rows[0]) throw new Error('Linked app account must belong to this family');
+  const taken = await client.query(
+    `SELECT id FROM family_members
+     WHERE family_id = $1 AND linked_user_id = $2 AND ($3::integer IS NULL OR id <> $3::integer)
+     LIMIT 1`,
+    [familyId, uid, memberId != null ? Number(memberId) : null]
+  );
+  if (taken.rows[0]) throw new Error('That app account is already linked to another family member');
+  return uid;
+}
+
 exports.list = async (req, res, next) => {
   try {
     const familyId = req.familyId;
@@ -110,6 +132,7 @@ exports.list = async (req, res, next) => {
        LEFT JOIN places rp ON rp.id::text = NULLIF(TRIM(fm.residence_place_id::text), '') AND rp.family_id = fm.family_id
        LEFT JOIN users uc ON uc.id::text = NULLIF(TRIM(fm.created_by::text), '')
        LEFT JOIN users uu ON uu.id::text = NULLIF(TRIM(fm.updated_by::text), '')
+       LEFT JOIN users lu ON lu.id = fm.linked_user_id
        WHERE fm.family_id = $1
        ORDER BY fm.name, fm.surname NULLS LAST, fm.id`,
       [familyId]
@@ -180,7 +203,7 @@ exports.create = async (req, res, next) => {
       residence_place,
       education_level, educational_qualification, marital_status, anniversary_date,
       blood_group, emergency_contact_name, emergency_contact_phone, privacy_level,
-      preferred_language, biography, instagram_id, facebook_id,
+      preferred_language, biography, instagram_id, facebook_id, linked_user_id,
     } = req.body;
     const is_alive = normalizeIsAlive(req.body);
     const sid = toNum(spouse_id);
@@ -193,6 +216,7 @@ exports.create = async (req, res, next) => {
 
     await client.query('BEGIN');
     await validateFamilyRelations(client, { familyId, memberId: null, fatherId: fid, motherId: mid, spouseId: sid });
+    const linkedUserId = await validateLinkedUser(client, linked_user_id, familyId, null);
     const result = await client.query(
       `INSERT INTO family_members (
         family_id,
@@ -200,8 +224,8 @@ exports.create = async (req, res, next) => {
         father_id, mother_id, spouse_id, gender, email, birth_place, birth_place_id, residence_place_id, residence_place, created_by, updated_by,
         occupation, notes, date_of_death, is_alive, education_level, educational_qualification,
         marital_status, anniversary_date, blood_group, emergency_contact_name, emergency_contact_phone,
-        privacy_level, preferred_language, biography, instagram_id, facebook_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)
+        privacy_level, preferred_language, biography, instagram_id, facebook_id, linked_user_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36)
       RETURNING id`,
       [
         familyId,
@@ -210,7 +234,7 @@ exports.create = async (req, res, next) => {
         birth_place || null, birthPlaceId, residencePlaceId, residence_place || null, actorId, actorId, occupation || null, notes || null, date_of_death || null, is_alive,
         education_level || null, educational_qualification || null, marital_status || null, anniversary_date || null,
         blood_group || null, emergency_contact_name || null, emergency_contact_phone || null, privacy_level || null,
-        preferred_language || null, biography || null, instagram_id || null, facebook_id || null,
+        preferred_language || null, biography || null, instagram_id || null, facebook_id || null, linkedUserId,
       ]
     );
     const memberId = result.rows[0].id;
@@ -247,6 +271,14 @@ exports.create = async (req, res, next) => {
     try {
       await client.query('ROLLBACK');
     } catch (_) {}
+    if (
+      err.message &&
+      (err.message.includes('linked') ||
+        err.message.includes('Linked') ||
+        err.message.includes('app account'))
+    ) {
+      return res.status(400).json({ error: err.message });
+    }
     next(err);
   } finally {
     client.release();
@@ -283,7 +315,7 @@ exports.update = async (req, res, next) => {
       residence_place,
       education_level, educational_qualification, marital_status, anniversary_date,
       blood_group, emergency_contact_name, emergency_contact_phone, privacy_level,
-      preferred_language, biography, instagram_id, facebook_id,
+      preferred_language, biography, instagram_id, facebook_id, linked_user_id,
     } = req.body;
     const is_alive = normalizeIsAlive(req.body);
     const fid = toNum(father_id);
@@ -299,6 +331,10 @@ exports.update = async (req, res, next) => {
       motherId: mid,
       spouseId: newSid,
     });
+    let linkedUserId = null;
+    if (linked_user_id !== undefined && linked_user_id !== null && String(linked_user_id).trim() !== '') {
+      linkedUserId = await validateLinkedUser(client, linked_user_id, familyId, req.params.id);
+    }
 
     await client.query(
       `UPDATE family_members SET
@@ -308,7 +344,7 @@ exports.update = async (req, res, next) => {
         date_of_death = $19, is_alive = $20, education_level = $21, educational_qualification = $22,
         marital_status = $23, anniversary_date = $24, blood_group = $25, emergency_contact_name = $26,
         emergency_contact_phone = $27, privacy_level = $28, preferred_language = $29, biography = $30,
-        instagram_id = $31, facebook_id = $32, updated_by = $33, updated_at = NOW()
+        instagram_id = $31, facebook_id = $32, updated_by = $33, linked_user_id = $36, updated_at = NOW()
       WHERE id = $34 AND family_id = $35`,
       [
         name, surname || null, relation || null, date_of_birth || null, phone || null, whatsapp_number || null, profile_photo,
@@ -317,6 +353,7 @@ exports.update = async (req, res, next) => {
         is_alive, education_level || null, educational_qualification || null, marital_status || null, anniversary_date || null,
         blood_group || null, emergency_contact_name || null, emergency_contact_phone || null, privacy_level || null,
         preferred_language || null, biography || null, instagram_id || null, facebook_id || null, actorId, req.params.id, familyId,
+        linkedUserId,
       ]
     );
     await syncSpouseBidirectional(client, familyId, req.params.id, newSid, prevSpouse);
@@ -354,6 +391,14 @@ exports.update = async (req, res, next) => {
     try {
       await client.query('ROLLBACK');
     } catch (_) {}
+    if (
+      err.message &&
+      (err.message.includes('linked') ||
+        err.message.includes('Linked') ||
+        err.message.includes('app account'))
+    ) {
+      return res.status(400).json({ error: err.message });
+    }
     next(err);
   } finally {
     client.release();
@@ -380,6 +425,18 @@ exports.remove = async (req, res, next) => {
       summary: `Deleted member id ${id}`,
     });
     res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.listLinkableUsers = async (req, res, next) => {
+  try {
+    const excludeMemberId = req.query.excludeMemberId
+      ? Number(req.query.excludeMemberId)
+      : null;
+    const users = await listLinkableUsers(req.familyId, excludeMemberId);
+    res.json({ users });
   } catch (err) {
     next(err);
   }

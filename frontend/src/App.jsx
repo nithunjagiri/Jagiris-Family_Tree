@@ -23,6 +23,8 @@ import PlacesMap from './pages/PlacesMap';
 import GlobalSearch from './pages/GlobalSearch';
 import AccountPrivacy from './pages/AccountPrivacy';
 import ContactUs from './pages/ContactUs';
+import MessagesInbox from './pages/MessagesInbox';
+import ChatThread from './pages/ChatThread';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import AdminAudit from './pages/AdminAudit';
 import AdminUsers from './pages/AdminUsers';
@@ -146,6 +148,8 @@ export default function App() {
         <Route path="family-tree" element={<FamilyTree />} />
         <Route path="places" element={<PlacesMap />} />
         <Route path="search" element={<GlobalSearch />} />
+        <Route path="messages" element={<MessagesInbox />} />
+        <Route path="messages/:threadId" element={<ChatThread />} />
         <Route path="contact" element={<ContactUs />} />
         <Route path="account" element={<AccountPrivacy />} />
         <Route

@@ -2,6 +2,7 @@ const db = require('../database/db');
 const { sendToUsers } = require('./fcmSender');
 const { scheduleInAppNotification } = require('./inAppNotifications');
 const { todayAndTomorrowInIST, normalizeCalendarYmd } = require('./calendarDate');
+const { sendOccasionWishIfDue } = require('./occasionEmail');
 
 const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 let intervalHandle = null;
@@ -21,7 +22,7 @@ async function checkBirthdays() {
   if (!tomorrowMMDD) return;
 
   const members = await db.query(
-    `SELECT fm.id, fm.name, fm.family_id,
+    `SELECT fm.id, fm.name, fm.surname, fm.family_id, fm.email, fm.linked_user_id,
             TO_CHAR(fm.date_of_birth, 'MM-DD') AS mmdd,
             fm.date_of_birth
      FROM family_members fm
@@ -71,6 +72,17 @@ async function checkBirthdays() {
     } catch (err) {
       console.error('[scheduler] birthday push error:', err.message);
     }
+
+    try {
+      await sendOccasionWishIfDue({
+        member: m,
+        kind: 'birthday',
+        referenceKey: key,
+        isToday,
+      });
+    } catch (err) {
+      console.error('[scheduler] birthday wish email error:', err.message);
+    }
   }
 }
 
@@ -82,7 +94,7 @@ async function checkAnniversaries() {
   if (!tomorrowMMDD) return;
 
   const members = await db.query(
-    `SELECT fm.id, fm.name, fm.family_id,
+    `SELECT fm.id, fm.name, fm.surname, fm.family_id, fm.email, fm.linked_user_id, fm.spouse_id,
             TO_CHAR(fm.anniversary_date, 'MM-DD') AS mmdd,
             fm.anniversary_date
      FROM family_members fm
@@ -91,6 +103,8 @@ async function checkAnniversaries() {
        AND TO_CHAR(fm.anniversary_date, 'MM-DD') IN ($1, $2)`,
     [todayMMDD, tomorrowMMDD]
   );
+
+  const sentEmails = new Set();
 
   for (const m of members.rows) {
     const isToday = m.mmdd === todayMMDD;
@@ -131,6 +145,18 @@ async function checkAnniversaries() {
       });
     } catch (err) {
       console.error('[scheduler] anniversary push error:', err.message);
+    }
+
+    try {
+      await sendOccasionWishIfDue({
+        member: m,
+        kind: 'anniversary',
+        referenceKey: key,
+        isToday,
+        sentEmails,
+      });
+    } catch (err) {
+      console.error('[scheduler] anniversary wish email error:', err.message);
     }
   }
 }

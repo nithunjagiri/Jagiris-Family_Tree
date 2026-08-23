@@ -33,6 +33,13 @@ export function navigateFromPushNotification(notification) {
         window.location.href = '/';
       }
       break;
+    case 'chat_message':
+      if (data.threadId) {
+        window.location.href = `/messages/${data.threadId}`;
+      } else {
+        window.location.href = '/messages';
+      }
+      break;
     default:
       break;
   }

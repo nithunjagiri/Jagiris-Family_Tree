@@ -6,6 +6,7 @@ import NotificationBell from './NotificationBell';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { accountApi, setActiveFamilyId, resolveJagirisFamilyId } from '../services/api';
+import { resolveBackendPublicUrl } from '../lib/backendOrigin';
 import { cn } from '../lib/utils';
 
 export default function TopBar({ onMenuClick }) {
@@ -75,8 +76,16 @@ export default function TopBar({ onMenuClick }) {
               className={cn(iconBtnClass, 'md:h-auto md:w-auto md:gap-2 md:px-3 md:py-2')}
               aria-label="Account menu"
             >
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400">
-                <User className="h-4 w-4" />
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-100 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400">
+                {user?.profile_photo ? (
+                  <img
+                    src={resolveBackendPublicUrl(user.profile_photo)}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <User className="h-4 w-4" />
+                )}
               </div>
               <span className="hidden text-sm font-medium md:inline">{user?.username}</span>
             </button>

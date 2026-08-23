@@ -1,4 +1,5 @@
 require('dotenv').config();
+const http = require('http');
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -14,9 +15,11 @@ const searchRoutes = require('./routes/search');
 const accountRoutes = require('./routes/account');
 const adminRoutes = require('./routes/admin');
 const notificationsRoutes = require('./routes/notifications');
+const messagesRoutes = require('./routes/messages');
 const { ensurePlacesAuditSchema } = require('./database/ensurePlacesAuditSchema');
 const { ensureAnnouncementsSchema } = require('./database/ensureAnnouncementsSchema');
 const { startScheduler } = require('./lib/notificationScheduler');
+const { initSocketServer } = require('./lib/socketServer');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -43,6 +46,7 @@ app.use('/api/search', searchRoutes);
 app.use('/api/account', accountRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/messages', messagesRoutes);
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
@@ -52,6 +56,9 @@ app.use((err, req, res, next) => {
   }
   if (err.message && err.message.includes('Invalid file type')) {
     return res.status(400).json({ error: err.message });
+  }
+  if (err.status) {
+    return res.status(err.status).json({ error: err.message });
   }
   console.error(err);
   res.status(err.status || 500).json({ error: err.message || 'Server error' });
@@ -73,5 +80,7 @@ app.use((err, req, res, next) => {
   } catch (err) {
     console.error('Database schema ensure failed (check PG* / DATABASE_URL):', err.message);
   }
-  app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+  const httpServer = http.createServer(app);
+  initSocketServer(httpServer);
+  httpServer.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
 })();

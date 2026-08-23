@@ -9,6 +9,7 @@ const router = express.Router();
 router.use(auth);
 router.use(resolveFamilyContext);
 
+router.get('/meta/linkable-users', familyMembersController.listLinkableUsers);
 router.get('/', familyMembersController.list);
 router.get('/:id', familyMembersController.get);
 router.post('/', uploadSingle.single('profile_photo'), familyMembersController.validateMember, familyMembersController.create);

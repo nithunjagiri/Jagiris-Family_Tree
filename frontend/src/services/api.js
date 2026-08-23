@@ -126,6 +126,10 @@ export const familyMembersApi = {
     return api.put(`/family-members/${id}`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
   delete: (id) => api.delete(`/family-members/${id}`),
+  listLinkableUsers: (excludeMemberId) =>
+    api.get('/family-members/meta/linkable-users', {
+      params: excludeMemberId ? { excludeMemberId } : {},
+    }),
 };
 
 export const photosApi = {
@@ -217,6 +221,18 @@ export const notificationsApi = {
   markFeedRead: (id) => api.patch(`/notifications/feed/${encodeURIComponent(id)}/read`),
   markAllFeedRead: () => api.patch('/notifications/feed/read-all'),
   sendTestNotification: () => api.post('/notifications/feed/test'),
+};
+
+export const messagesApi = {
+  listThreads: () => api.get('/messages/threads'),
+  unreadCount: () => api.get('/messages/threads/unread-count'),
+  openThread: (payload) => api.post('/messages/threads', payload),
+  listMessages: (id, params) => api.get(`/messages/threads/${id}/messages`, { params }),
+  send: (id, body) => api.post(`/messages/threads/${id}/messages`, { body }),
+  markRead: (id) => api.patch(`/messages/threads/${id}/read`),
+  deleteMessage: (threadId, messageId) =>
+    api.delete(`/messages/threads/${threadId}/messages/${messageId}`),
+  clearThread: (id) => api.post(`/messages/threads/${id}/clear`),
 };
 
 export const adminApi = {

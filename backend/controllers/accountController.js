@@ -363,9 +363,25 @@ exports.patchProfile = async (req, res, next) => {
       summary: 'Profile updated',
     });
 
+    let responseProfilePhoto = null;
+    try {
+      const profileRow = await selectUserProfileForAccount(req.user.id);
+      responseProfilePhoto = profileRow.rows[0]?.profile_photo ?? null;
+    } catch (_) {
+      /* profile_photo column may be missing on older schemas */
+    }
+
     res.json({
       token,
-      user: { id: u.id, username: u.username, email: u.email, isAdmin, first_name: u.first_name || null, last_name: u.last_name || null },
+      user: {
+        id: u.id,
+        username: u.username,
+        email: u.email,
+        isAdmin,
+        first_name: u.first_name || null,
+        last_name: u.last_name || null,
+        profile_photo: responseProfilePhoto,
+      },
     });
   } catch (err) {
     next(err);

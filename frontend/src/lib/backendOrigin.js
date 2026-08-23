@@ -29,3 +29,11 @@ export function resolveBackendPublicUrl(path) {
   if (p.startsWith('/uploads')) return `${origin}${p}`;
   return p;
 }
+
+/** Socket.io connects to the API host (Render) or same-origin in dev (Vite ws proxy). */
+export function getSocketUrl() {
+  const origin = getBackendOrigin();
+  if (origin) return origin;
+  if (typeof window !== 'undefined') return window.location.origin;
+  return '';
+}

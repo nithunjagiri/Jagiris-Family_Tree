@@ -1,7 +1,7 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
-import { useParams, Link, useLocation } from 'react-router-dom';
+import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Pencil, User, Users, Mail, Phone, MessageCircle, MapPin, Briefcase, Calendar, Activity, X } from 'lucide-react';
-import { familyMembersApi } from '../services/api';
+import { familyMembersApi, messagesApi } from '../services/api';
 import { formatCalendarLong } from '../lib/calendarDate';
 import { HIDE_RELATION_NAMES_IN_UI } from '../lib/appDisplaySettings';
 import { resolveBackendPublicUrl } from '../lib/backendOrigin';
@@ -10,6 +10,7 @@ import { getNavigationOriginPath } from '../lib/navigationOrigin';
 import { useAuth } from '../context/AuthContext';
 import { toTelE164, whatsAppHref } from '../lib/phoneLinks';
 import { memberWishText, senderDisplayName, shouldShowMemberWish } from '../lib/wishMessages';
+import { getApiErrorMessage } from '../lib/apiErrorMessage';
 import WishActions from '../components/WishActions';
 
 const ProfileMiniMap = lazy(() => import('../components/ProfileMiniMap'));
@@ -47,6 +48,7 @@ export default function MemberProfile() {
   const { id } = useParams();
   const location = useLocation();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const handleBack = useAppBackNavigation();
   const returnTo = location.state?.returnTo || getNavigationOriginPath() || null;
   const [member, setMember] = useState(null);
@@ -54,6 +56,8 @@ export default function MemberProfile() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [messageLoading, setMessageLoading] = useState(false);
+  const [messageErr, setMessageErr] = useState('');
 
   useEffect(() => {
     if (!lightboxOpen) return;
@@ -128,6 +132,22 @@ export default function MemberProfile() {
   const phoneTel = toTelE164(member.phone);
   const phoneLink = phoneTel ? `tel:${phoneTel}` : null;
   const waLink = whatsAppHref(member.whatsapp_number);
+  const canMessage =
+    member.linked_user_id &&
+    Number(member.linked_user_id) !== Number(user?.id);
+
+  const handleMessage = async () => {
+    setMessageErr('');
+    setMessageLoading(true);
+    try {
+      const { data } = await messagesApi.openThread({ familyMemberId: Number(id) });
+      navigate(`/messages/${data.id}`, { state: { returnTo: `/family-members/${id}` } });
+    } catch (err) {
+      setMessageErr(getApiErrorMessage(err, 'Could not open conversation.'));
+    } finally {
+      setMessageLoading(false);
+    }
+  };
 
   return (
     <div className="w-full max-w-none">
@@ -171,9 +191,35 @@ export default function MemberProfile() {
                 <p className="text-primary-600 dark:text-primary-400">{member.relation}</p>
               ) : null}
               {showWish ? (
-                <div className="mt-4 flex justify-center sm:justify-start">
+                <div className="mt-4 flex flex-wrap justify-center gap-2 sm:justify-start">
                   <WishActions member={member} message={wishText} />
+                  {canMessage ? (
+                    <button
+                      type="button"
+                      onClick={handleMessage}
+                      disabled={messageLoading}
+                      className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+                    >
+                      <MessageCircle className="h-4 w-4" />
+                      {messageLoading ? 'Opening…' : 'Message'}
+                    </button>
+                  ) : null}
                 </div>
+              ) : canMessage ? (
+                <div className="mt-4 flex justify-center sm:justify-start">
+                  <button
+                    type="button"
+                    onClick={handleMessage}
+                    disabled={messageLoading}
+                    className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                    {messageLoading ? 'Opening…' : 'Message'}
+                  </button>
+                </div>
+              ) : null}
+              {messageErr ? (
+                <p className="mt-2 text-sm text-red-600 dark:text-red-400">{messageErr}</p>
               ) : null}
             </div>
             {member.birth_place_lat && member.birth_place_lng && (

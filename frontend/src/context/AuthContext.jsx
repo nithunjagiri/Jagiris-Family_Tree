@@ -8,6 +8,7 @@ import {
 } from '../lib/pushNotifications';
 import { navigateFromPushNotification } from '../lib/pushNavigation';
 import { requestNotificationFeedRefresh } from '../hooks/useNotificationFeed';
+import { disconnectChatSocket } from '../hooks/useChatSocket';
 
 const AuthContext = createContext(null);
 
@@ -71,7 +72,18 @@ export function AuthProvider({ children }) {
     if (t && u) {
       setToken(t);
       try {
-        setUser(JSON.parse(u));
+        const parsed = JSON.parse(u);
+        setUser(parsed);
+        accountApi
+          .getPrivacySettings()
+          .then((res) => {
+            const profileUser = res.data?.user;
+            if (!profileUser) return;
+            const updated = { ...parsed, profile_photo: profileUser.profile_photo ?? null };
+            setUser(updated);
+            localStorage.setItem(USER_KEY, JSON.stringify(updated));
+          })
+          .catch(() => {});
       } catch (_) {
         localStorage.removeItem(TOKEN_KEY);
         localStorage.removeItem(USER_KEY);
@@ -103,6 +115,7 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     await unregisterPush();
+    disconnectChatSocket();
     setToken(null);
     setUser(null);
     localStorage.removeItem(TOKEN_KEY);

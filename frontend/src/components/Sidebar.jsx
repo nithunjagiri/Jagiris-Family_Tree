@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, Image, Calendar, GitBranch, MapPin, Search, Settings, Shield, Mail, Megaphone, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, Users, Image, Calendar, GitBranch, MapPin, Search, Settings, Shield, Mail, Megaphone, BarChart3, MessageSquare } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
 
@@ -12,6 +12,7 @@ const baseNav = [
   { to: '/family-tree', label: 'Family Tree', icon: GitBranch },
   { to: '/places', label: 'Places & map', icon: MapPin },
   { to: '/search', label: 'Search', icon: Search },
+  { to: '/messages', label: 'Messages', icon: MessageSquare, messages: true },
   { to: '/contact', label: 'Contact us', icon: Mail },
   { to: '/account', label: 'Account & privacy', icon: Settings },
 ];
@@ -48,7 +49,7 @@ export default function Sidebar({ open, onClose }) {
         )}
       >
         <nav className="flex flex-col gap-1 p-2 md:p-2 md:pt-3">
-          {nav.map(({ to, label, icon: Icon, adminPortal, adminAnnouncements, reports }) => (
+          {nav.map(({ to, label, icon: Icon, adminPortal, adminAnnouncements, reports, messages }) => (
             <NavLink
               key={to}
               to={to}
@@ -64,7 +65,9 @@ export default function Sidebar({ open, onClose }) {
                       ? pathname.startsWith('/admin/announcements')
                       : reports
                         ? pathname.startsWith('/reports')
-                        : isActive)
+                        : messages
+                          ? pathname.startsWith('/messages')
+                          : isActive)
                     ? 'bg-primary-600 text-white md:bg-slate-800 md:text-white'
                     : 'text-slate-200 hover:bg-slate-800/90 hover:text-white'
                 )

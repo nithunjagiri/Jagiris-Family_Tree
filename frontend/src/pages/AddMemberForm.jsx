@@ -128,6 +128,8 @@ export default function AddMemberForm() {
   const [dupModalOpen, setDupModalOpen] = useState(false);
   const [dupMatches, setDupMatches] = useState([]);
   const [dupDobDiffers, setDupDobDiffers] = useState(false);
+  const [linkedUserId, setLinkedUserId] = useState('');
+  const [linkableUsers, setLinkableUsers] = useState([]);
 
   useEffect(() => {
     Promise.all([familyMembersApi.list(), placesApi.list()])
@@ -140,7 +142,11 @@ export default function AddMemberForm() {
         setMembers([]);
         setPlaceOptions([]);
       });
-  }, []);
+    familyMembersApi
+      .listLinkableUsers(isEdit ? id : undefined)
+      .then((r) => setLinkableUsers(r.data?.users || []))
+      .catch(() => setLinkableUsers([]));
+  }, [id, isEdit]);
 
   useEffect(() => {
     if (state.parentId) {
@@ -188,6 +194,7 @@ export default function AddMemberForm() {
         setFatherId(m.father_id ? String(m.father_id) : '');
         setMotherId(m.mother_id ? String(m.mother_id) : '');
         setSpouseId(m.spouse_id ? String(m.spouse_id) : '');
+        setLinkedUserId(m.linked_user_id ? String(m.linked_user_id) : '');
         setExistingProfilePhoto(m.profile_photo || null);
       })
       .catch(() => setError('Failed to load member'))
@@ -244,6 +251,7 @@ export default function AddMemberForm() {
         father_id: father_id || null,
         mother_id: mother_id || null,
         spouse_id: spouse_id || null,
+        linked_user_id: linkedUserId || null,
       };
     },
     [
@@ -273,6 +281,7 @@ export default function AddMemberForm() {
       father_id,
       mother_id,
       spouse_id,
+      linkedUserId,
     ]
   );
 
@@ -792,6 +801,27 @@ export default function AddMemberForm() {
                 placeholder={gender ? '— None —' : 'Select gender first'}
               />
             </div>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Linked app account
+            </label>
+            <select
+              value={linkedUserId}
+              onChange={(e) => setLinkedUserId(e.target.value)}
+              className={inputClass}
+            >
+              <option value="">— None —</option>
+              {linkableUsers.map((u) => (
+                <option key={u.id} value={String(u.id)} disabled={!u.is_available}>
+                  {u.display_name || u.username}
+                  {!u.is_available ? ' (linked elsewhere)' : ''}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Link this profile to a registered family user so others can message them in-app.
+            </p>
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Profile photo</label>
