@@ -53,3 +53,23 @@ CREATE INDEX IF NOT EXISTS idx_messages_sender
 
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 ALTER TABLE conversation_members ADD COLUMN IF NOT EXISTS cleared_at TIMESTAMPTZ;
+
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_type TEXT NOT NULL DEFAULT 'text';
+ALTER TABLE messages ALTER COLUMN body DROP NOT NULL;
+
+CREATE TABLE IF NOT EXISTS message_attachments (
+  id SERIAL PRIMARY KEY,
+  message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  image_path TEXT NOT NULL,
+  width INTEGER,
+  height INTEGER,
+  byte_size INTEGER,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_message_attachments_message
+  ON message_attachments (message_id, sort_order);
+
+ALTER TABLE conversation_members ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
+ALTER TABLE conversation_members ADD COLUMN IF NOT EXISTS inbox_removed_at TIMESTAMPTZ;

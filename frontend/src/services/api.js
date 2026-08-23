@@ -224,15 +224,32 @@ export const notificationsApi = {
 };
 
 export const messagesApi = {
-  listThreads: () => api.get('/messages/threads'),
+  listThreads: (params) => api.get('/messages/threads', { params }),
   unreadCount: () => api.get('/messages/threads/unread-count'),
   openThread: (payload) => api.post('/messages/threads', payload),
   listMessages: (id, params) => api.get(`/messages/threads/${id}/messages`, { params }),
   send: (id, body) => api.post(`/messages/threads/${id}/messages`, { body }),
+  sendImages: (threadId, items, caption) => {
+    const form = new FormData();
+    items.forEach(({ file, width, height, byteSize }) => {
+      form.append('images', file);
+      form.append('width', String(width ?? ''));
+      form.append('height', String(height ?? ''));
+      form.append('byte_size', String(byteSize ?? file.size ?? ''));
+    });
+    if (caption?.trim()) form.append('body', caption.trim());
+    return api.post(`/messages/threads/${threadId}/messages/images`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000,
+    });
+  },
   markRead: (id) => api.patch(`/messages/threads/${id}/read`),
   deleteMessage: (threadId, messageId) =>
     api.delete(`/messages/threads/${threadId}/messages/${messageId}`),
   clearThread: (id) => api.post(`/messages/threads/${id}/clear`),
+  deleteChat: (id) => api.post(`/messages/threads/${id}/delete-chat`),
+  archiveThread: (id) => api.post(`/messages/threads/${id}/archive`),
+  unarchiveThread: (id) => api.post(`/messages/threads/${id}/unarchive`),
 };
 
 export const adminApi = {

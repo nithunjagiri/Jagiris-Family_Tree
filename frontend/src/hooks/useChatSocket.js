@@ -31,6 +31,10 @@ function getSocket(token) {
     const set = listeners.get('message:deleted');
     if (set) set.forEach((fn) => fn(payload));
   });
+  sharedSocket.on('thread:read', (payload) => {
+    const set = listeners.get('thread:read');
+    if (set) set.forEach((fn) => fn(payload));
+  });
   return sharedSocket;
 }
 
@@ -47,11 +51,14 @@ export function useChatSocket({
   threadId = null,
   onMessage,
   onMessageDeleted,
+  onThreadRead,
 } = {}) {
   const onMessageRef = useRef(onMessage);
   const onDeletedRef = useRef(onMessageDeleted);
+  const onThreadReadRef = useRef(onThreadRead);
   onMessageRef.current = onMessage;
   onDeletedRef.current = onMessageDeleted;
+  onThreadReadRef.current = onThreadRead;
 
   const subscribe = useCallback((event, handler) => {
     if (!listeners.has(event)) listeners.set(event, new Set());
@@ -72,9 +79,13 @@ export function useChatSocket({
     const unsubDeleted = subscribe('message:deleted', (payload) => {
       onDeletedRef.current?.(payload);
     });
+    const unsubRead = subscribe('thread:read', (payload) => {
+      onThreadReadRef.current?.(payload);
+    });
     return () => {
       unsubNew();
       unsubDeleted();
+      unsubRead();
     };
   }, [enabled, subscribe]);
 

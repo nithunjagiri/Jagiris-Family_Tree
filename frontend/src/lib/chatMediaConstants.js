@@ -1,0 +1,5 @@
+export const CHAT_IMAGE_TARGET_BYTES = 500 * 1024;
+export const CHAT_IMAGE_MAX_DIMENSION = 1280;
+export const CHAT_MAX_IMAGES_PER_SEND = 5;
+export const CHAT_COMPRESS_CONCURRENCY = 2;
+export const CHAT_UPLOAD_MAX_BYTES = 600 * 1024;

@@ -51,8 +51,32 @@ const eventStorage = useCloudinary
   ? makeCloudinaryStorage('events')
   : makeLocalStorage('events');
 
+const CHAT_MAX_BYTES = 600 * 1024;
+const CHAT_MAX_FILES = 5;
+
+const chatFileFilter = (req, file, cb) => {
+  const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+  if (allowed.includes(file.mimetype)) cb(null, true);
+  else cb(new Error('Invalid file type. Use JPEG, PNG, or WebP.'), false);
+};
+
+const chatStorage = useCloudinary ? makeCloudinaryStorage('chat') : makeLocalStorage('chat');
+
 const uploadSingle = multer({ storage: profileStorage, fileFilter, limits: { fileSize: MAX_SIZE } });
 const uploadGallery = multer({ storage: galleryStorage, fileFilter, limits: { fileSize: MAX_SIZE } });
 const uploadEvent = multer({ storage: eventStorage, fileFilter, limits: { fileSize: MAX_SIZE } });
+const uploadChat = multer({
+  storage: chatStorage,
+  fileFilter: chatFileFilter,
+  limits: { fileSize: CHAT_MAX_BYTES, files: CHAT_MAX_FILES },
+});
 
-module.exports = { uploadSingle, uploadGallery, uploadEvent, useCloudinary };
+module.exports = {
+  uploadSingle,
+  uploadGallery,
+  uploadEvent,
+  uploadChat,
+  useCloudinary,
+  CHAT_MAX_BYTES,
+  CHAT_MAX_FILES,
+};

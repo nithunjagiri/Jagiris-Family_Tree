@@ -1,49 +1,72 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useParams, useLocation } from 'react-router-dom';
-import { ArrowLeft, Send, User, Smile, Trash2, MoreVertical } from 'lucide-react';
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
+import { ArrowLeft, MoreVertical, Trash2, User } from 'lucide-react';
 import { messagesApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { getApiErrorMessage } from '../lib/apiErrorMessage';
 import { resolveBackendPublicUrl } from '../lib/backendOrigin';
 import { useChatSocket } from '../hooks/useChatSocket';
-import { useAppBackNavigation } from '../hooks/useAppBackNavigation';
-import ChatEmojiPicker from '../components/ChatEmojiPicker';
-import { cn } from '../lib/utils';
-
-function formatMessageTime(iso) {
-  if (!iso) return '';
-  try {
-    return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  } catch {
-    return '';
-  }
-}
+import { clearChatAttachmentCache } from '../lib/chatAttachmentLoader';
+import ChatComposer from '../components/chat/ChatComposer';
+import ChatMessageBubble from '../components/chat/ChatMessageBubble';
 
 function applyDeletedMessage(messages, payload) {
   const msg = payload?.message;
   if (!msg?.id) return messages;
-  return messages.map((m) => (m.id === msg.id ? { ...m, ...msg, is_deleted: true, body: null } : m));
+  return messages.map((m) =>
+    m.id === msg.id
+      ? { ...m, ...msg, is_deleted: true, body: null, caption: null, attachments: [] }
+      : m
+  );
+}
+
+function mergeServerMessages(serverMessages, pendingLocal) {
+  const serverIds = new Set(serverMessages.map((m) => m.id).filter(Boolean));
+  const stillPending = pendingLocal.filter((m) => !m.id || !serverIds.has(m.id));
+  const combined = [...serverMessages];
+  for (const pending of stillPending) {
+    if (!combined.some((m) => m.clientId && m.clientId === pending.clientId)) {
+      combined.push(pending);
+    }
+  }
+  return combined.sort((a, b) => {
+    const ta = new Date(a.created_at || 0).getTime();
+    const tb = new Date(b.created_at || 0).getTime();
+    if (ta !== tb) return ta - tb;
+    return (a.id || 0) - (b.id || 0);
+  });
 }
 
 export default function ChatThread() {
   const { threadId } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const returnTo = location.state?.returnTo || '/messages';
-  const handleBack = useAppBackNavigation(returnTo);
+  const handleBack = useCallback(() => {
+    navigate(returnTo, { replace: true });
+  }, [navigate, returnTo]);
   const [messages, setMessages] = useState([]);
   const [otherParticipant, setOtherParticipant] = useState(null);
+  const [peerLastReadAt, setPeerLastReadAt] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [draft, setDraft] = useState('');
+  const [pendingItems, setPendingItems] = useState([]);
   const [sending, setSending] = useState(false);
-  const [emojiOpen, setEmojiOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const bottomRef = useRef(null);
   const pollRef = useRef(null);
   const menuRef = useRef(null);
+  const pendingMessagesRef = useRef([]);
+  const uploadingRef = useRef(false);
+
+  useEffect(() => {
+    uploadingRef.current = uploading;
+  }, [uploading]);
 
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -55,7 +78,11 @@ export default function ChatThread() {
         messagesApi.listMessages(threadId, { limit: 50 }),
         messagesApi.listThreads(),
       ]);
-      setMessages(msgRes.data.messages || []);
+      const serverMessages = msgRes.data.messages || [];
+      setMessages(mergeServerMessages(serverMessages, pendingMessagesRef.current));
+      if (msgRes.data.peer_last_read_at != null) {
+        setPeerLastReadAt(msgRes.data.peer_last_read_at);
+      }
       const thread = (threadRes.data.threads || []).find((t) => String(t.id) === String(threadId));
       setOtherParticipant(thread?.other_participant || null);
       setError('');
@@ -71,6 +98,10 @@ export default function ChatThread() {
     setLoading(true);
     loadMessages();
   }, [loadMessages]);
+
+  useEffect(() => {
+    return () => clearChatAttachmentCache();
+  }, [threadId]);
 
   useEffect(() => {
     scrollToBottom();
@@ -93,33 +124,45 @@ export default function ChatThread() {
       if (!msg?.id) return;
       setMessages((prev) => {
         if (prev.some((m) => m.id === msg.id)) return prev;
-        return [...prev, msg];
+        const withoutMatchingPending = prev.filter(
+          (m) => !(m._pending && m.sender_user_id === msg.sender_user_id && m.message_type === msg.message_type)
+        );
+        return [...withoutMatchingPending, msg];
       });
+      pendingMessagesRef.current = pendingMessagesRef.current.filter((m) => m.id !== msg.id);
       messagesApi.markRead(threadId).catch(() => {});
     },
     onMessageDeleted: (payload) => {
       if (String(payload?.conversation_id) !== String(threadId)) return;
       setMessages((prev) => applyDeletedMessage(prev, payload));
     },
+    onThreadRead: (payload) => {
+      if (String(payload?.conversation_id) !== String(threadId)) return;
+      if (payload?.last_read_at) setPeerLastReadAt(payload.last_read_at);
+    },
   });
 
   useEffect(() => {
     pollRef.current = setInterval(() => {
+      if (uploadingRef.current) return;
       messagesApi
         .listMessages(threadId, { limit: 50 })
-        .then((res) => setMessages(res.data.messages || []))
+        .then((res) => {
+          const serverMessages = res.data.messages || [];
+          setMessages(mergeServerMessages(serverMessages, pendingMessagesRef.current));
+          if (res.data.peer_last_read_at != null) {
+            setPeerLastReadAt(res.data.peer_last_read_at);
+          }
+        })
         .catch(() => {});
     }, 5000);
     return () => clearInterval(pollRef.current);
   }, [threadId]);
 
-  const handleSend = async (e) => {
-    e.preventDefault();
-    const text = draft.trim();
+  const handleSendText = async (text) => {
     if (!text || sending) return;
     setSending(true);
     setDraft('');
-    setEmojiOpen(false);
     try {
       const { data } = await messagesApi.send(threadId, text);
       const msg = data.message;
@@ -134,6 +177,57 @@ export default function ChatThread() {
     }
   };
 
+  const handleSendImages = async (items, caption) => {
+    if (!items?.length || uploading) return;
+    setUploading(true);
+    setError('');
+
+    const clientId = `pending-${Date.now()}`;
+    const optimistic = {
+      clientId,
+      _pending: true,
+      id: null,
+      conversation_id: Number(threadId),
+      sender_user_id: user?.id,
+      message_type: 'image',
+      body: caption || null,
+      caption: caption || null,
+      created_at: new Date().toISOString(),
+      attachments: items.map((item, index) => ({
+        id: `local-${clientId}-${index}`,
+        localPreview: URL.createObjectURL(item.file),
+        sort_order: index,
+      })),
+    };
+    pendingMessagesRef.current = [...pendingMessagesRef.current, optimistic];
+    setMessages((prev) => [...prev, optimistic]);
+    setPendingItems([]);
+
+    try {
+      const { data } = await messagesApi.sendImages(threadId, items, caption);
+      const msg = data.message;
+      if (msg) {
+        optimistic.attachments?.forEach((a) => {
+          if (a.localPreview) URL.revokeObjectURL(a.localPreview);
+        });
+        pendingMessagesRef.current = pendingMessagesRef.current.filter((m) => m.clientId !== clientId);
+        setMessages((prev) => {
+          const without = prev.filter((m) => m.clientId !== clientId);
+          if (without.some((m) => m.id === msg.id)) return without;
+          return [...without, msg];
+        });
+      }
+    } catch (err) {
+      pendingMessagesRef.current = pendingMessagesRef.current.filter((m) => m.clientId !== clientId);
+      setMessages((prev) => prev.filter((m) => m.clientId !== clientId));
+      if (caption) setDraft(caption);
+      setPendingItems(items);
+      setError(getApiErrorMessage(err, 'Could not send images.'));
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleDeleteMessage = async (messageId) => {
     if (!window.confirm('Delete this message for everyone in this chat?')) return;
     setDeletingId(messageId);
@@ -143,7 +237,9 @@ export default function ChatThread() {
       if (data?.message) {
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === data.message.id ? { ...m, ...data.message, is_deleted: true, body: null } : m
+            m.id === data.message.id
+              ? { ...m, ...data.message, is_deleted: true, body: null, caption: null, attachments: [] }
+              : m
           )
         );
       }
@@ -162,6 +258,7 @@ export default function ChatThread() {
     try {
       await messagesApi.clearThread(threadId);
       setMessages([]);
+      pendingMessagesRef.current = [];
     } catch (err) {
       setError(getApiErrorMessage(err, 'Could not clear chat.'));
     } finally {
@@ -169,23 +266,20 @@ export default function ChatThread() {
     }
   };
 
-  const insertEmoji = (emoji) => {
-    setDraft((prev) => `${prev}${emoji}`);
-  };
-
   const otherName = otherParticipant?.display_name || otherParticipant?.username || 'Chat';
   const otherPhoto = otherParticipant?.profile_photo;
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="mb-3 flex items-center gap-3">
+    <div className="flex h-full min-h-0 flex-1 flex-col">
+      <div className="mb-2 flex shrink-0 items-center gap-2 sm:mb-3 sm:gap-3">
         <button
           type="button"
           onClick={handleBack}
-          className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300"
+          className="inline-flex touch-manipulation items-center gap-2 rounded-lg border border-gray-300 bg-white px-2.5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 sm:px-3"
+          aria-label="Back to messages"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back
+          <span className="hidden sm:inline">Back</span>
         </button>
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-100 dark:bg-primary-900/30">
@@ -239,105 +333,30 @@ export default function ChatThread() {
                   Say hello to start the conversation.
                 </p>
               ) : (
-                messages.map((msg) => {
-                  const mine = Number(msg.sender_user_id) === Number(user?.id);
-                  const deleted = msg.is_deleted || msg.deleted_at;
-                  return (
-                    <div key={msg.id} className={cn('group flex items-end gap-1', mine ? 'justify-end' : 'justify-start')}>
-                      {mine && !deleted ? (
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteMessage(msg.id)}
-                          disabled={deletingId === msg.id}
-                          className="mb-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-gray-400 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-600 group-hover:opacity-100 dark:hover:bg-red-900/20 dark:hover:text-red-400"
-                          aria-label="Delete message"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      ) : (
-                        <span className="w-7 shrink-0" />
-                      )}
-                      <div
-                        className={cn(
-                          'max-w-[85%] rounded-2xl px-4 py-2 text-sm shadow-sm sm:max-w-[70%]',
-                          deleted
-                            ? 'bg-gray-50 italic text-gray-500 dark:bg-gray-800/50 dark:text-gray-400'
-                            : mine
-                              ? 'rounded-br-md bg-primary-600 text-white'
-                              : 'rounded-bl-md bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100'
-                        )}
-                      >
-                        <p className="whitespace-pre-wrap break-words">
-                          {deleted ? 'This message was deleted' : msg.body}
-                        </p>
-                        <p
-                          className={cn(
-                            'mt-1 text-[10px]',
-                            deleted
-                              ? 'text-gray-400'
-                              : mine
-                                ? 'text-primary-100'
-                                : 'text-gray-500 dark:text-gray-400'
-                          )}
-                        >
-                          {formatMessageTime(msg.created_at)}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })
+                messages.map((msg) => (
+                  <ChatMessageBubble
+                    key={msg.clientId || msg.id}
+                    msg={msg}
+                    mine={Number(msg.sender_user_id) === Number(user?.id)}
+                    peerLastReadAt={peerLastReadAt}
+                    onDelete={handleDeleteMessage}
+                    deleting={deletingId === msg.id}
+                  />
+                ))
               )}
               <div ref={bottomRef} />
             </div>
 
-            <form
-              onSubmit={handleSend}
-              className="relative flex items-end gap-2 border-t border-gray-200 p-3 pb-safe dark:border-gray-700"
-            >
-              <div className="relative flex min-w-0 flex-1 items-end gap-1">
-                <button
-                  type="button"
-                  onClick={() => setEmojiOpen((o) => !o)}
-                  className={cn(
-                    'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-colors',
-                    emojiOpen
-                      ? 'border-primary-500 bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400'
-                      : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300'
-                  )}
-                  aria-label="Open emoji picker"
-                >
-                  <Smile className="h-5 w-5" />
-                </button>
-                <ChatEmojiPicker
-                  open={emojiOpen}
-                  onClose={() => setEmojiOpen(false)}
-                  onSelect={insertEmoji}
-                  className="left-0"
-                />
-                <textarea
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSend(e);
-                    }
-                  }}
-                  rows={1}
-                  placeholder="Type a message…"
-                  maxLength={2000}
-                  className="max-h-32 min-h-[2.5rem] flex-1 resize-none rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={!draft.trim() || sending}
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-600 text-white transition-colors hover:bg-primary-700 disabled:opacity-50"
-                aria-label="Send message"
-              >
-                <Send className="h-4 w-4" />
-              </button>
-            </form>
+            <ChatComposer
+              draft={draft}
+              onDraftChange={setDraft}
+              pendingItems={pendingItems}
+              onPendingChange={setPendingItems}
+              onSendText={handleSendText}
+              onSendImages={handleSendImages}
+              sending={sending}
+              uploading={uploading}
+            />
           </>
         )}
       </div>

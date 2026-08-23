@@ -86,6 +86,11 @@ function useAndroidBackButton() {
         CapApp.minimizeApp();
         return;
       }
+      if (/^\/messages\/[^/]+$/.test(pathname)) {
+        const returnTo = locationRef.current.state?.returnTo || '/messages';
+        navigate(returnTo, { replace: true });
+        return;
+      }
       performAppBack(navigate, pathname);
     });
     return () => { listener.then((l) => l.remove()); };

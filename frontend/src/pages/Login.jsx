@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { authApi } from '../services/api';
 import { getApiErrorMessage } from '../lib/apiErrorMessage';
 import { cn } from '../lib/utils';
+import { isNativeApp } from '../lib/mobile';
 import { AuthBranding } from '../components/AuthBranding';
 import { Eye, EyeOff } from 'lucide-react';
 
@@ -42,7 +43,14 @@ export default function Login() {
   const passwordInputClass = cn(inputClass, 'pr-10');
 
   return (
-    <div className="standalone-page flex min-h-full flex-col items-center justify-center bg-gray-50 px-4 py-12 dark:bg-gray-950">
+    <div
+      className={cn(
+        'standalone-page flex min-h-full flex-col items-center bg-gray-50 px-4 pb-safe dark:bg-gray-950',
+        isNativeApp()
+          ? 'justify-start pt-[var(--app-safe-top)] py-6'
+          : 'justify-center py-12'
+      )}
+    >
       <div className="w-full max-w-md">
         <AuthBranding />
         <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-soft dark:border-gray-800 dark:bg-gray-900 dark:shadow-soft-dark">

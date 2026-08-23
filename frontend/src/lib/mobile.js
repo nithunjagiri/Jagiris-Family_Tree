@@ -18,7 +18,7 @@ export function initMobileShell() {
   if (isNativeApp()) {
     root.classList.add('native-app');
     if (Capacitor.getPlatform() === 'android') {
-      root.style.setProperty('--native-status-bar-fallback', '28px');
+      root.style.setProperty('--native-status-bar-fallback', '32px');
     }
   }
   if (isCompactViewport()) {

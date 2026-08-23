@@ -447,6 +447,34 @@ async function ensurePlacesAuditSchema() {
   await db.query(
     'ALTER TABLE conversation_members ADD COLUMN IF NOT EXISTS cleared_at TIMESTAMPTZ'
   );
+
+  await db.query(
+    `ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_type TEXT NOT NULL DEFAULT 'text'`
+  );
+  await db.query(`ALTER TABLE messages ALTER COLUMN body DROP NOT NULL`);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS message_attachments (
+      id SERIAL PRIMARY KEY,
+      message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+      image_path TEXT NOT NULL,
+      width INTEGER,
+      height INTEGER,
+      byte_size INTEGER,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await db.query(
+    'CREATE INDEX IF NOT EXISTS idx_message_attachments_message ON message_attachments (message_id, sort_order)'
+  );
+
+  await db.query(
+    'ALTER TABLE conversation_members ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ'
+  );
+  await db.query(
+    'ALTER TABLE conversation_members ADD COLUMN IF NOT EXISTS inbox_removed_at TIMESTAMPTZ'
+  );
 }
 
 module.exports = { ensurePlacesAuditSchema };
