@@ -95,6 +95,29 @@ export async function downloadCsvFile(blob, filename) {
 }
 
 /**
+ * Save an image blob to device storage (web download or native save).
+ * @param {Blob} blob
+ * @param {string} filename
+ */
+export async function downloadImageFile(blob, filename) {
+  if (Capacitor.isNativePlatform()) {
+    return saveBlobToDevice(blob, filename);
+  }
+
+  const url = window.URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.style.display = 'none';
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  setTimeout(() => {
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(anchor);
+  }, 200);
+}
+
+/**
  * Save a blob as a downloadable file on web, or directly to device storage on mobile.
  * @param {Blob} blob
  * @param {string} filename

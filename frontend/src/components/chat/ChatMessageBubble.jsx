@@ -45,27 +45,46 @@ export default function ChatMessageBubble({
         )}
         <div
           className={cn(
-            'max-w-[85%] rounded-2xl px-3 py-2 text-sm shadow-sm sm:max-w-[70%]',
+            'max-w-[85%] rounded-2xl text-sm shadow-sm sm:max-w-[70%]',
             deleted
-              ? 'bg-gray-50 italic text-gray-500 dark:bg-gray-800/50 dark:text-gray-400'
-              : mine
-                ? 'rounded-br-md bg-primary-600 text-white'
-                : 'rounded-bl-md bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100',
-            isImage && 'px-2 pb-2 pt-2'
+              ? 'bg-gray-50 px-3 py-2 italic text-gray-500 dark:bg-gray-800/50 dark:text-gray-400'
+              : isImage
+                ? cn('overflow-hidden p-0', mine ? 'rounded-br-md' : 'rounded-bl-md')
+                : cn(
+                    'px-3 py-2',
+                    mine
+                      ? 'rounded-br-md bg-primary-600 text-white'
+                      : 'rounded-bl-md bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100'
+                  )
           )}
         >
           {deleted ? (
             <p className="whitespace-pre-wrap break-words px-1">This message was deleted</p>
           ) : isImage ? (
-            <div className="space-y-1">
+            <div>
               <ChatImageGrid attachments={attachments} onImageClick={setLightboxIndex} />
-              {caption ? (
-                <p className="whitespace-pre-wrap break-words px-1 pt-1 text-sm">{caption}</p>
-              ) : null}
+              <div
+                className={cn(
+                  'flex items-center justify-end gap-1 px-2 py-1.5 text-[10px]',
+                  mine
+                    ? 'bg-primary-600 text-primary-100'
+                    : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
+                )}
+              >
+                {caption ? (
+                  <p className="mr-auto whitespace-pre-wrap break-words text-sm text-inherit">{caption}</p>
+                ) : null}
+                <span>{formatMessageTime(msg.created_at)}</span>
+                {mine && !deleted ? (
+                  <ChatReadReceipt createdAt={msg.created_at} peerLastReadAt={peerLastReadAt} />
+                ) : null}
+                {msg._pending ? <span className="opacity-70"> · Sending…</span> : null}
+              </div>
             </div>
           ) : (
             <p className="whitespace-pre-wrap break-words px-1">{msg.body}</p>
           )}
+          {!isImage ? (
           <div
             className={cn(
               'mt-1 flex items-center justify-end gap-1 px-1 text-[10px]',
@@ -82,6 +101,7 @@ export default function ChatMessageBubble({
             ) : null}
             {msg._pending ? <span className="opacity-70"> · Sending…</span> : null}
           </div>
+          ) : null}
         </div>
       </div>
       {lightboxIndex != null && isImage ? (

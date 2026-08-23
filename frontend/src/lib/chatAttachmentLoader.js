@@ -1,4 +1,5 @@
 import api from '../services/api';
+import { downloadImageFile } from './downloadFile';
 
 const blobCache = new Map();
 
@@ -43,4 +44,26 @@ export function clearChatAttachmentCache() {
     }
   }
   blobCache.clear();
+}
+
+function chatImageFilename(attachment) {
+  const id = attachment?.id;
+  const base = id && !String(id).startsWith('local-') ? `chat-${id}` : `chat-${Date.now()}`;
+  return `${base}.jpg`;
+}
+
+/** Fetch attachment bytes (not object URL). */
+export async function fetchChatAttachmentBlobData(attachment) {
+  if (attachment?.localPreview) {
+    const res = await fetch(attachment.localPreview);
+    return res.blob();
+  }
+  const res = await api.get(getAttachmentApiPath(attachment.id), { responseType: 'blob' });
+  return res.data;
+}
+
+/** Download a chat image on web or save to device on mobile. */
+export async function downloadChatAttachment(attachment) {
+  const blob = await fetchChatAttachmentBlobData(attachment);
+  return downloadImageFile(blob, chatImageFilename(attachment));
 }
