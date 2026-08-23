@@ -420,6 +420,8 @@ async function unhideInboxForRecipient(client, conversationId, recipientId) {
     [Number(conversationId), Number(recipientId)]
   );
 }
+
+async function upsertChatInAppNotification({
   recipientUserId,
   familyId,
   conversationId,
