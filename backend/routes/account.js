@@ -3,6 +3,7 @@ const { auth, requireAdmin } = require('../middleware/auth');
 const { uploadSingle } = require('../middleware/upload');
 const accountController = require('../controllers/accountController');
 const { resolveFamilyContext } = require('../lib/familyAccess');
+const { deleteAccountRateLimit } = require('../middleware/rateLimit');
 
 const router = express.Router();
 router.use(auth);
@@ -14,6 +15,11 @@ router.patch('/privacy', accountController.validatePrivacyPatch, accountControll
 router.post('/change-password', accountController.validateChangePassword, accountController.changePassword);
 router.get('/export', requireAdmin, accountController.exportData);
 router.get('/families', accountController.listFamilies);
-router.post('/delete-account', accountController.validateDeleteAccount, accountController.deleteAccount);
+router.post(
+  '/delete-account',
+  deleteAccountRateLimit,
+  accountController.validateDeleteAccount,
+  accountController.deleteAccount
+);
 
 module.exports = router;

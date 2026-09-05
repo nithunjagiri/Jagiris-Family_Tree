@@ -1,19 +1,21 @@
 const jwt = require('jsonwebtoken');
 const { Server } = require('socket.io');
 const chatPresence = require('./chatPresence');
-
-const JWT_SECRET = process.env.JWT_SECRET || 'secret';
+const { JWT_SECRET } = require('./jwtConfig');
+const { getAllowedOrigins } = require('./corsConfig');
 
 let io = null;
 
 function parseAllowedOrigins() {
-  const raw = process.env.CORS_ORIGINS || process.env.FRONTEND_ORIGIN || '';
-  const fromEnv = raw
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (fromEnv.length > 0) return fromEnv;
-  return true;
+  if (process.env.NODE_ENV !== 'production') {
+    const fromEnv = (process.env.CORS_ORIGINS || process.env.FRONTEND_ORIGIN || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (fromEnv.length > 0) return fromEnv;
+    return true;
+  }
+  return getAllowedOrigins();
 }
 
 function initSocketServer(httpServer) {

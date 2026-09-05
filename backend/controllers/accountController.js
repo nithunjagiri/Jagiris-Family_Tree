@@ -9,8 +9,7 @@ const { useCloudinary } = require('../middleware/upload');
 const path = require('path');
 const fs = require('fs');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'secret';
-const JWT_EXPIRY = '7d';
+const { JWT_SECRET, JWT_EXPIRY } = require('../lib/jwtConfig');
 const GENDER_VALUES = ['female', 'male', 'non_binary', 'other', 'prefer_not_to_say'];
 
 const USER_PROFILE_SELECTS = [

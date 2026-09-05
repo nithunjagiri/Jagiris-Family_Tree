@@ -1,7 +1,7 @@
 {
   "name": "jagiris-family-frontend",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.2.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,7 +12,9 @@
     "sync:android": "npx cap sync android",
     "icons:android": "python resources/_prepare_assets.py && npx capacitor-assets generate --android && python resources/_patch_adaptive_inset.py && python resources/_apply_large_mipmaps.py",
     "apk:debug": "npm run build:android && cd android && gradlew.bat assembleDebug",
-    "apk:release": "npm run build:android && cd android && gradlew.bat assembleRelease"
+    "apk:release": "npm run build:android && cd android && gradlew.bat assembleRelease",
+    "aab:release": "npm run build:android && cd android && gradlew.bat bundleRelease",
+    "playstore:assets": "python resources/_generate_play_store_assets.py"
   },
   "dependencies": {
     "@capacitor/android": "^8.3.4",
