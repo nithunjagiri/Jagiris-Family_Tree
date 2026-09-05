@@ -251,4 +251,15 @@ npm run aab:release
 frontend/android/app/build/outputs/bundle/release/app-release.aab
 ```
 
+**Current local artifact (5 Sep 2026):** built successfully but **UNSIGNED** (no `keystore.properties` passwords).  
+Play Console requires a **signed** AAB. After filling passwords:
+
+```bash
+cd frontend
+copy release\keystore.properties.example android\keystore.properties
+# edit passwords; keyAlias=jagiris-upload
+npm run aab:release
+jarsigner -verify android\app\build\outputs\bundle\release\app-release.aab
+```
+
 (Also copy to a safe backup outside the repo; `*.aab` is gitignored.)
