@@ -4,6 +4,9 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const { corsOptions } = require('./lib/corsConfig');
+// Load JWT config early so production fails fast if JWT_SECRET is missing
+require('./lib/jwtConfig');
 
 const authRoutes = require('./routes/auth');
 const familyMembersRoutes = require('./routes/familyMembers');
@@ -33,7 +36,7 @@ const chatDir = path.join(uploadsDir, 'chat');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
-app.use(cors({ origin: true, credentials: true }));
+app.use(cors(corsOptions()));
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 

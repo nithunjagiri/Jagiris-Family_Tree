@@ -6,6 +6,16 @@ node_modules/
 .env.local
 .env.*.local
 
+# Android signing (never commit passwords or keystores)
+*.keystore
+*.jks
+frontend/android/keystore.properties
+jagiris-release.keystore
+
+# Local APK / AAB artifacts
+*.apk
+*.aab
+
 # Build / logs
 dist/
 *.log
@@ -20,3 +30,7 @@ backend/uploads/
 
 # Capacitor Android build
 frontend/android/
+
+# Python cache
+**/__pycache__/
+*.pyc

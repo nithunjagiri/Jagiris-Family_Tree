@@ -24,8 +24,7 @@ function generateSixDigitOtp() {
   return String(crypto.randomInt(100000, 1000000));
 }
 
-const JWT_SECRET = process.env.JWT_SECRET || 'secret';
-const JWT_EXPIRY = '7d';
+const { JWT_SECRET, JWT_EXPIRY } = require('../lib/jwtConfig');
 const OTP_EXPIRY_MINUTES = Math.min(60, Math.max(5, parseInt(process.env.PASSWORD_RESET_OTP_MINUTES || '15', 10) || 15));
 
 const GENDER_VALUES = ['female', 'male', 'non_binary', 'other', 'prefer_not_to_say'];
