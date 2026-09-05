@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { familyMembersApi, placesApi } from '../services/api';
@@ -15,6 +15,21 @@ import { buildMemberLinkOptions } from '../lib/memberSelectOptions';
 import SearchableSelect from '../components/SearchableSelect';
 import { HIDE_RELATION_NAMES_IN_UI } from '../lib/appDisplaySettings';
 import { getApiErrorMessage } from '../lib/apiErrorMessage';
+import {
+  compressImageFile,
+  formatFileSize,
+  IMAGE_ACCEPTED_TYPES,
+  ONE_MB,
+} from '../lib/imageProcessing';
+import ImageCropModal from '../components/ImageCropModal';
+import { resolveBackendPublicUrl } from '../lib/backendOrigin';
+import { getNavigationOriginPath } from '../lib/navigationOrigin';
+import { useAppBackNavigation } from '../hooks/useAppBackNavigation';
+
+const PROFILE_MAX_SIZE_BYTES = 5 * 1024 * 1024;
+const PROFILE_MAX_SIZE_LABEL = '5 MB';
+const PROFILE_TARGET_SIZE_BYTES = ONE_MB;
+const PROFILE_TARGET_SIZE_LABEL = '1 MB';
 
 const inputClass =
   'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-gray-600 dark:bg-gray-800 dark:text-white';
@@ -64,6 +79,7 @@ function livingFromMember(m) {
 
 export default function AddMemberForm() {
   const navigate = useNavigate();
+  const handleBack = useAppBackNavigation();
   const location = useLocation();
   const { id } = useParams();
   const isEdit = !!id;
@@ -101,12 +117,19 @@ export default function AddMemberForm() {
   const [mother_id, setMotherId] = useState('');
   const [spouse_id, setSpouseId] = useState('');
   const [profileFile, setProfileFile] = useState(null);
+  const [profilePreview, setProfilePreview] = useState(null);
+  const [existingProfilePhoto, setExistingProfilePhoto] = useState(null);
+  const [profileProcessing, setProfileProcessing] = useState(false);
+  const [profileCropOpen, setProfileCropOpen] = useState(false);
+  const profileInputRef = useRef(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(isEdit);
   const [dupModalOpen, setDupModalOpen] = useState(false);
   const [dupMatches, setDupMatches] = useState([]);
   const [dupDobDiffers, setDupDobDiffers] = useState(false);
+  const [linkedUserId, setLinkedUserId] = useState('');
+  const [linkableUsers, setLinkableUsers] = useState([]);
 
   useEffect(() => {
     Promise.all([familyMembersApi.list(), placesApi.list()])
@@ -119,7 +142,11 @@ export default function AddMemberForm() {
         setMembers([]);
         setPlaceOptions([]);
       });
-  }, []);
+    familyMembersApi
+      .listLinkableUsers(isEdit ? id : undefined)
+      .then((r) => setLinkableUsers(r.data?.users || []))
+      .catch(() => setLinkableUsers([]));
+  }, [id, isEdit]);
 
   useEffect(() => {
     if (state.parentId) {
@@ -167,6 +194,8 @@ export default function AddMemberForm() {
         setFatherId(m.father_id ? String(m.father_id) : '');
         setMotherId(m.mother_id ? String(m.mother_id) : '');
         setSpouseId(m.spouse_id ? String(m.spouse_id) : '');
+        setLinkedUserId(m.linked_user_id ? String(m.linked_user_id) : '');
+        setExistingProfilePhoto(m.profile_photo || null);
       })
       .catch(() => setError('Failed to load member'))
       .finally(() => setFetching(false));
@@ -222,6 +251,7 @@ export default function AddMemberForm() {
         father_id: father_id || null,
         mother_id: mother_id || null,
         spouse_id: spouse_id || null,
+        linked_user_id: linkedUserId || null,
       };
     },
     [
@@ -251,6 +281,7 @@ export default function AddMemberForm() {
       father_id,
       mother_id,
       spouse_id,
+      linkedUserId,
     ]
   );
 
@@ -303,18 +334,25 @@ export default function AddMemberForm() {
       }
     }
     const display = [name, surname].filter(Boolean).join(' ').trim() || String(name || '').trim() || 'Member';
+    const returnTo = getNavigationOriginPath() || state.returnTo || null;
     navigate('/family-members', {
+      replace: true,
       state: {
         memberSavedMessage: isEdit
           ? `Saved changes for ${display}.`
           : `${display} was added to your family list.`,
+        ...(returnTo ? { returnTo } : {}),
       },
     });
-  }, [buildPayload, isAlive, isEdit, id, profileFile, state.childId, state.childGender, navigate, name, surname]);
+  }, [buildPayload, isAlive, isEdit, id, profileFile, state.childId, state.childGender, state.returnTo, navigate, name, surname]);
 
   const runSaveAfterDuplicateCheck = useCallback(
     async (skipDuplicateCheck) => {
       setError('');
+      if (profileFile?.size > PROFILE_MAX_SIZE_BYTES) {
+        setError('Please compress or crop the profile photo before saving.');
+        return;
+      }
       /* Duplicate warning is only for new members; edits save without this step. */
       if (!skipDuplicateCheck && !isEdit) {
         const { matches, dobDiffersFromForm } = findDuplicateMembers(
@@ -339,8 +377,64 @@ export default function AddMemberForm() {
         setLoading(false);
       }
     },
-    [members, name, surname, gender, date_of_birth, isEdit, saveMember]
+    [members, name, surname, gender, date_of_birth, isEdit, saveMember, profileFile]
   );
+
+  const handleProfileSelect = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!IMAGE_ACCEPTED_TYPES.includes(file.type)) {
+      setError('Only JPEG, PNG, GIF, or WebP images are allowed for profile photo.');
+      return;
+    }
+    setError(
+      file.size > PROFILE_MAX_SIZE_BYTES
+        ? `Profile photo is ${formatFileSize(file.size)}. Compress or crop it before saving.`
+        : ''
+    );
+    if (profilePreview) URL.revokeObjectURL(profilePreview);
+    setProfileFile(file);
+    setProfilePreview(URL.createObjectURL(file));
+  };
+
+  const processProfilePhoto = async (cropSquare = false) => {
+    if (!profileFile) return;
+    setProfileProcessing(true);
+    setError('');
+    try {
+      const processed = await compressImageFile(profileFile, {
+        targetBytes: PROFILE_TARGET_SIZE_BYTES,
+        cropSquare,
+        maxWidth: 1200,
+        maxHeight: 1200,
+      });
+      setProfileFile(processed);
+      if (profilePreview) URL.revokeObjectURL(profilePreview);
+      setProfilePreview(URL.createObjectURL(processed));
+      if (processed.size > PROFILE_MAX_SIZE_BYTES) {
+        setError(`${processed.name} is still larger than ${PROFILE_MAX_SIZE_LABEL}. Try crop + compress.`);
+      }
+    } catch (err) {
+      setError(err.message || 'Could not process profile photo.');
+    } finally {
+      setProfileProcessing(false);
+    }
+  };
+
+  const applyCroppedProfilePhoto = (cropped) => {
+    setProfileFile(cropped);
+    if (profilePreview) URL.revokeObjectURL(profilePreview);
+    setProfilePreview(URL.createObjectURL(cropped));
+    setProfileCropOpen(false);
+    setError('');
+  };
+
+  const clearProfilePhoto = () => {
+    if (profilePreview) URL.revokeObjectURL(profilePreview);
+    setProfileFile(null);
+    setProfilePreview(null);
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -358,14 +452,43 @@ export default function AddMemberForm() {
     void runSaveAfterDuplicateCheck(true);
   };
 
-  const memberOptions = useMemo(
-    () =>
-      buildMemberLinkOptions(members, {
-        excludeId: isEdit && id != null && id !== '' ? Number(id) : null,
-      }),
+  const memberOptionsBase = useMemo(
+    () => ({
+      excludeId: isEdit && id != null && id !== '' ? Number(id) : null,
+    }),
     [members, isEdit, id]
   );
-  const toNum = (v) => (v === '' ? null : v);
+
+  const fatherOptions = useMemo(
+    () =>
+      buildMemberLinkOptions(members, {
+        ...memberOptionsBase,
+        role: 'father',
+        preserveIds: [father_id].filter((v) => v != null && v !== ''),
+      }),
+    [members, memberOptionsBase, father_id]
+  );
+
+  const motherOptions = useMemo(
+    () =>
+      buildMemberLinkOptions(members, {
+        ...memberOptionsBase,
+        role: 'mother',
+        preserveIds: [mother_id].filter((v) => v != null && v !== ''),
+      }),
+    [members, memberOptionsBase, mother_id]
+  );
+
+  const spouseOptions = useMemo(
+    () =>
+      buildMemberLinkOptions(members, {
+        ...memberOptionsBase,
+        role: 'spouse',
+        memberGender: gender,
+        preserveIds: [spouse_id].filter((v) => v != null && v !== ''),
+      }),
+    [members, memberOptionsBase, gender, spouse_id]
+  );
 
   if (fetching) {
     return (
@@ -383,8 +506,8 @@ export default function AddMemberForm() {
         </h1>
         <button
           type="button"
-          onClick={() => navigate('/family-members')}
-          className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+          onClick={handleBack}
+          className="inline-flex touch-manipulation items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
         >
           <ArrowLeft className="h-4 w-4" />
           Cancel
@@ -567,7 +690,7 @@ export default function AddMemberForm() {
               )}
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Current city</label>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Current Place</label>
               <select
                 value={currentCityChoice}
                 onChange={(e) => {
@@ -593,7 +716,7 @@ export default function AddMemberForm() {
                   value={residence_place}
                   onChange={(e) => setResidencePlace(e.target.value)}
                   className={cn(inputClass, 'mt-2')}
-                  placeholder="Enter current city"
+                  placeholder="Enter current place"
                 />
               )}
             </div>
@@ -656,7 +779,7 @@ export default function AddMemberForm() {
               <SearchableSelect
                 value={father_id}
                 onChange={setFatherId}
-                options={memberOptions.filter((o) => toNum(o.value) !== toNum(id))}
+                options={fatherOptions}
                 placeholder="— None —"
               />
             </div>
@@ -665,7 +788,7 @@ export default function AddMemberForm() {
               <SearchableSelect
                 value={mother_id}
                 onChange={setMotherId}
-                options={memberOptions.filter((o) => toNum(o.value) !== toNum(id))}
+                options={motherOptions}
                 placeholder="— None —"
               />
             </div>
@@ -674,30 +797,125 @@ export default function AddMemberForm() {
               <SearchableSelect
                 value={spouse_id}
                 onChange={setSpouseId}
-                options={memberOptions.filter((o) => toNum(o.value) !== toNum(id))}
-                placeholder="— None —"
+                options={spouseOptions}
+                placeholder={gender ? '— None —' : 'Select gender first'}
               />
             </div>
           </div>
           <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Linked app account
+            </label>
+            <select
+              value={linkedUserId}
+              onChange={(e) => setLinkedUserId(e.target.value)}
+              className={inputClass}
+            >
+              <option value="">— None —</option>
+              {linkableUsers.map((u) => (
+                <option key={u.id} value={String(u.id)} disabled={!u.is_available}>
+                  {u.display_name || u.username}
+                  {!u.is_available ? ' (linked elsewhere)' : ''}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Link this profile to a registered family user so others can message them in-app.
+            </p>
+          </div>
+          <div>
             <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Profile photo</label>
             <input
+              ref={profileInputRef}
               type="file"
-              accept="image/*"
-              onChange={(e) => setProfileFile(e.target.files?.[0] || null)}
-              className="block w-full text-sm text-gray-500 file:mr-4 file:rounded-lg file:border-0 file:bg-primary-50 file:px-4 file:py-2 file:text-primary-700 dark:file:bg-primary-900/30 dark:file:text-primary-300"
+              accept="image/jpeg,image/png,image/gif,image/webp"
+              className="hidden"
+              onChange={handleProfileSelect}
             />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+              <div className="h-24 w-24 shrink-0 overflow-hidden rounded-full border-2 border-gray-200 bg-gray-100 dark:border-gray-600 dark:bg-gray-800">
+                {profilePreview ? (
+                  <img src={profilePreview} alt="" className="h-full w-full object-cover" />
+                ) : existingProfilePhoto ? (
+                  <img
+                    src={resolveBackendPublicUrl(existingProfilePhoto)}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-xs text-gray-400">No photo</div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1 space-y-2">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  JPEG, PNG, GIF, or WebP. Max {PROFILE_MAX_SIZE_LABEL}. Use crop to center the face in the circle.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => profileInputRef.current?.click()}
+                    className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium dark:border-gray-600"
+                  >
+                    Choose photo
+                  </button>
+                  {profileFile && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => processProfilePhoto(false)}
+                        disabled={profileProcessing}
+                        className="rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+                      >
+                        {profileProcessing ? 'Processing...' : `Compress to ${PROFILE_TARGET_SIZE_LABEL}`}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setProfileCropOpen(true)}
+                        disabled={profileProcessing}
+                        className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium dark:border-gray-600"
+                      >
+                        Crop &amp; adjust
+                      </button>
+                      <button
+                        type="button"
+                        onClick={clearProfilePhoto}
+                        className="rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 dark:border-red-900/50 dark:text-red-400"
+                      >
+                        Clear
+                      </button>
+                    </>
+                  )}
+                </div>
+                {profileFile && (
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                    Selected: {formatFileSize(profileFile.size)}
+                    {profileFile.size > PROFILE_MAX_SIZE_BYTES ? (
+                      <span className="ml-1 text-amber-700 dark:text-amber-300">(over {PROFILE_MAX_SIZE_LABEL})</span>
+                    ) : null}
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
           {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || profileProcessing}
             className="w-full rounded-lg bg-primary-600 py-2.5 font-medium text-white transition-colors hover:bg-primary-700 disabled:opacity-50 sm:w-auto sm:px-8"
           >
-            {loading ? 'Saving...' : isEdit ? 'Update' : 'Add Member'}
+            {loading ? 'Saving...' : profileProcessing ? 'Processing photo...' : isEdit ? 'Update' : 'Add Member'}
           </button>
         </form>
       </div>
+
+      <ImageCropModal
+        open={profileCropOpen}
+        file={profileFile}
+        title="Crop profile photo"
+        targetBytes={PROFILE_TARGET_SIZE_BYTES}
+        onClose={() => setProfileCropOpen(false)}
+        onApply={applyCroppedProfilePhoto}
+      />
 
       <DuplicateMemberModal
         open={dupModalOpen}

@@ -1,14 +1,11 @@
 /**
- * Transactional email for password-reset OTP.
+ * Transactional email for password-reset OTP only.
  *
- * Configure either Resend (recommended) or SMTP:
- * - Resend: RESEND_API_KEY, and RESEND_FROM or EMAIL_FROM
- *   Use a verified domain (e.g. noreply@yourdomain.com) to email any user.
- *   onboarding@resend.dev only delivers to your Resend signup email (not other accounts).
- * - SMTP: SMTP_HOST, SMTP_PORT (optional, default 587), SMTP_USER, SMTP_PASS, EMAIL_FROM
+ * Resend (recommended): RESEND_API_KEY + RESEND_FROM or EMAIL_FROM.
+ *   Use a verified domain to email any user. onboarding@resend.dev only delivers to your Resend signup email.
  *
- * Usage / quotas: check your provider dashboard (e.g. resend.com → Usage) or API response headers
- * (Resend sends x-resend-daily-quota / x-resend-monthly-quota on some responses).
+ * SMTP fallback for OTP only when RESEND_API_KEY is unset (SMTP_HOST, SMTP_USER, SMTP_PASS, EMAIL_FROM).
+ * Occasion wishes use a separate channel: backend/lib/smtpWishSend.js (WISH_EMAIL_FROM + SMTP_*).
  */
 const nodemailer = require('nodemailer');
 
@@ -16,10 +13,14 @@ function fromAddress() {
   return process.env.RESEND_FROM || process.env.EMAIL_FROM || '';
 }
 
+function hasResendKey() {
+  return Boolean(process.env.RESEND_API_KEY && String(process.env.RESEND_API_KEY).trim());
+}
+
 function isOtpMailConfigured() {
   const from = fromAddress().trim();
   if (!from) return false;
-  if (process.env.RESEND_API_KEY && String(process.env.RESEND_API_KEY).trim()) return true;
+  if (hasResendKey()) return true;
   const host = process.env.SMTP_HOST && String(process.env.SMTP_HOST).trim();
   const user = process.env.SMTP_USER && String(process.env.SMTP_USER).trim();
   const pass = process.env.SMTP_PASS != null && String(process.env.SMTP_PASS).trim() !== '';
@@ -94,11 +95,11 @@ async function sendPasswordResetOtpEmail({ to, otp, minutesValid }) {
   const text = `Your password reset code is: ${otp}\n\nIt expires in ${minutesValid} minutes. If you did not request this, ignore this email.`;
   const html = `<p>Your password reset code is:</p><p style="font-size:24px;font-weight:bold;letter-spacing:4px">${otp}</p><p>This code expires in <strong>${minutesValid}</strong> minutes.</p><p>If you did not request a password reset, you can ignore this message.</p>`;
 
-  if (process.env.RESEND_API_KEY && String(process.env.RESEND_API_KEY).trim()) {
+  if (hasResendKey()) {
     await sendViaResend({ to, subject, html, text });
-  } else {
-    await sendViaSmtp({ to, subject, html, text });
+    return;
   }
+  await sendViaSmtp({ to, subject, html, text });
 }
 
 module.exports = {

@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../database/db');
+const XLSX = require('xlsx');
 const { body, validationResult } = require('express-validator');
 const { logAudit } = require('../lib/auditLog');
 const { ensurePlacesAuditSchema } = require('../database/ensurePlacesAuditSchema');
@@ -100,28 +101,74 @@ exports.changePassword = async (req, res, next) => {
 
 exports.exportData = async (req, res, next) => {
   try {
+    if (!req.user?.isAdmin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
     const familyId = req.familyId;
-    const [members, events, photos] = await Promise.all([
-      db.query(
-        'SELECT id, family_id, name, surname, relation, gender, date_of_birth, date_of_death, is_alive, phone, whatsapp_number, email, birth_place, birth_place_id, residence_place_id, residence_place, created_by, updated_by, occupation, notes, education_level, educational_qualification, marital_status, anniversary_date, blood_group, emergency_contact_name, emergency_contact_phone, privacy_level, preferred_language, biography, instagram_id, facebook_id, father_id, mother_id, spouse_id, created_at, updated_at FROM family_members WHERE family_id = $1 ORDER BY id',
-        [familyId]
-      ),
-      db.query('SELECT id, family_id, title, event_date, description FROM events WHERE family_id = $1 ORDER BY event_date', [familyId]),
-      db.query('SELECT id, family_id, title, image_path, uploaded_at FROM photos WHERE family_id = $1 ORDER BY uploaded_at DESC', [familyId]),
-    ]);
+    const members = await db.query(
+      `SELECT id, name, surname, relation, gender, date_of_birth, date_of_death, is_alive,
+              phone, whatsapp_number, email, birth_place, residence_place, occupation,
+              education_level, educational_qualification, marital_status, anniversary_date,
+              blood_group, emergency_contact_name, emergency_contact_phone, privacy_level,
+              preferred_language, instagram_id, facebook_id, notes, created_at, updated_at
+       FROM family_members
+       WHERE family_id = $1
+       ORDER BY id`,
+      [familyId]
+    );
 
-    const payload = {
-      exportedAt: new Date().toISOString(),
-      user: { id: req.user.id, username: req.user.username },
-      family: { id: familyId, name: req.familyName || null },
-      familyMembers: members.rows,
-      events: events.rows,
-      photos: photos.rows,
-    };
+    const columns = [
+      ['id', 'ID'],
+      ['name', 'Name'],
+      ['surname', 'Surname'],
+      ['relation', 'Relation'],
+      ['gender', 'Gender'],
+      ['date_of_birth', 'Date of Birth'],
+      ['date_of_death', 'Date of Death'],
+      ['is_alive', 'Is Alive'],
+      ['phone', 'Phone'],
+      ['whatsapp_number', 'WhatsApp Number'],
+      ['email', 'Email'],
+      ['birth_place', 'Birth Place'],
+      ['residence_place', 'Residence Place'],
+      ['occupation', 'Occupation'],
+      ['education_level', 'Education Level'],
+      ['educational_qualification', 'Educational Qualification'],
+      ['marital_status', 'Marital Status'],
+      ['anniversary_date', 'Anniversary Date'],
+      ['blood_group', 'Blood Group'],
+      ['emergency_contact_name', 'Emergency Contact Name'],
+      ['emergency_contact_phone', 'Emergency Contact Phone'],
+      ['privacy_level', 'Privacy Level'],
+      ['preferred_language', 'Preferred Language'],
+      ['instagram_id', 'Instagram ID'],
+      ['facebook_id', 'Facebook ID'],
+      ['notes', 'Notes'],
+      ['created_at', 'Created At'],
+      ['updated_at', 'Updated At'],
+    ];
 
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="jagiris-family-export-${Date.now()}.json"`);
-    res.send(JSON.stringify(payload, null, 2));
+    const sheetRows = [
+      columns.map(([, label]) => label),
+      ...members.rows.map((row) => columns.map(([key]) => {
+        const value = row[key];
+        return value === null || value === undefined ? '' : value;
+      })),
+    ];
+
+    const worksheet = XLSX.utils.aoa_to_sheet(sheetRows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Family Members');
+
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    const filename = `jagiris-family-members-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(buffer);
   } catch (err) {
     next(err);
   }
@@ -316,9 +363,25 @@ exports.patchProfile = async (req, res, next) => {
       summary: 'Profile updated',
     });
 
+    let responseProfilePhoto = null;
+    try {
+      const profileRow = await selectUserProfileForAccount(req.user.id);
+      responseProfilePhoto = profileRow.rows[0]?.profile_photo ?? null;
+    } catch (_) {
+      /* profile_photo column may be missing on older schemas */
+    }
+
     res.json({
       token,
-      user: { id: u.id, username: u.username, email: u.email, isAdmin, first_name: u.first_name || null, last_name: u.last_name || null },
+      user: {
+        id: u.id,
+        username: u.username,
+        email: u.email,
+        isAdmin,
+        first_name: u.first_name || null,
+        last_name: u.last_name || null,
+        profile_photo: responseProfilePhoto,
+      },
     });
   } catch (err) {
     next(err);

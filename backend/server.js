@@ -1,4 +1,5 @@
 require('dotenv').config();
+const http = require('http');
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -13,7 +14,12 @@ const placesRoutes = require('./routes/places');
 const searchRoutes = require('./routes/search');
 const accountRoutes = require('./routes/account');
 const adminRoutes = require('./routes/admin');
+const notificationsRoutes = require('./routes/notifications');
+const messagesRoutes = require('./routes/messages');
 const { ensurePlacesAuditSchema } = require('./database/ensurePlacesAuditSchema');
+const { ensureAnnouncementsSchema } = require('./database/ensureAnnouncementsSchema');
+const { startScheduler } = require('./lib/notificationScheduler');
+const { initSocketServer } = require('./lib/socketServer');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -22,7 +28,8 @@ const PORT = process.env.PORT || 5000;
 const uploadsDir = path.join(__dirname, 'uploads');
 const profilesDir = path.join(uploadsDir, 'profiles');
 const galleryDir = path.join(uploadsDir, 'gallery');
-[uploadsDir, profilesDir, galleryDir].forEach((dir) => {
+const chatDir = path.join(uploadsDir, 'chat');
+[uploadsDir, profilesDir, galleryDir, chatDir].forEach((dir) => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
@@ -39,15 +46,24 @@ app.use('/api/places', placesRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/account', accountRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/notifications', notificationsRoutes);
+app.use('/api/messages', messagesRoutes);
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
 app.use((err, req, res, next) => {
   if (err.code === 'LIMIT_FILE_SIZE') {
-    return res.status(413).json({ error: 'File too large. Maximum allowed size is 5 MB per file.' });
+    const isChatUpload = String(req.path || '').includes('/messages/images');
+    const message = isChatUpload
+      ? 'Chat image too large. Maximum allowed size is 600 KB per image.'
+      : 'File too large. Maximum allowed size is 5 MB per file.';
+    return res.status(413).json({ error: message });
   }
   if (err.message && err.message.includes('Invalid file type')) {
     return res.status(400).json({ error: err.message });
+  }
+  if (err.status) {
+    return res.status(err.status).json({ error: err.message });
   }
   console.error(err);
   res.status(err.status || 500).json({ error: err.message || 'Server error' });
@@ -55,12 +71,21 @@ app.use((err, req, res, next) => {
 
 (async () => {
   try {
+    await ensureAnnouncementsSchema();
+    console.log('Database: announcements table is ready.');
+  } catch (err) {
+    console.error('Announcements schema ensure failed:', err.message);
+  }
+  try {
     await ensurePlacesAuditSchema();
     console.log(
-      'Database: places, audit_logs, user_privacy_settings, users profile columns (incl. city/village), and users.is_admin are ready.'
+      'Database: places, audit_logs, user_privacy_settings, users profile columns (incl. city/village), users.is_admin, and push notification tables are ready.'
     );
+    startScheduler();
   } catch (err) {
     console.error('Database schema ensure failed (check PG* / DATABASE_URL):', err.message);
   }
-  app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+  const httpServer = http.createServer(app);
+  initSocketServer(httpServer);
+  httpServer.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
 })();

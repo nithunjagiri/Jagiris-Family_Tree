@@ -1,11 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { KeyRound, Download, UserX, Shield, ClipboardCheck, User, Camera, X } from 'lucide-react';
 import { accountApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../lib/utils';
 import { getApiErrorMessage } from '../lib/apiErrorMessage';
+import { downloadBlobFile, filenameFromContentDisposition } from '../lib/downloadFile';
 import { resolveBackendPublicUrl } from '../lib/backendOrigin';
+import { compressImageFile, formatFileSize, IMAGE_ACCEPTED_TYPES, ONE_MB } from '../lib/imageProcessing';
+import ImageCropModal from '../components/ImageCropModal';
+import { SHOW_PRIVACY_RECORD } from '../lib/appDisplaySettings';
+import ModulePageHeader from '../components/ModulePageHeader';
 
 const PROFILE_GENDER_OPTIONS = [
   { value: '', label: 'Not set' },
@@ -15,6 +20,10 @@ const PROFILE_GENDER_OPTIONS = [
   { value: 'other', label: 'Other' },
   { value: 'prefer_not_to_say', label: 'Prefer not to say' },
 ];
+const PROFILE_MAX_SIZE_BYTES = 5 * 1024 * 1024;
+const PROFILE_MAX_SIZE_LABEL = '5 MB';
+const PROFILE_TARGET_SIZE_BYTES = ONE_MB;
+const PROFILE_TARGET_SIZE_LABEL = '1 MB';
 
 function formatTs(iso) {
   if (!iso) return null;
@@ -40,7 +49,7 @@ function emptyProfileForm() {
 }
 
 export default function AccountPrivacy() {
-  const { user, logout, login } = useAuth();
+  const { user, logout, login, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [profileUser, setProfileUser] = useState(null);
   const [profileForm, setProfileForm] = useState(emptyProfileForm);
@@ -50,6 +59,8 @@ export default function AccountPrivacy() {
   const [profileSaving, setProfileSaving] = useState(false);
   const [profilePhotoFile, setProfilePhotoFile] = useState(null);
   const [profilePhotoPreview, setProfilePhotoPreview] = useState(null);
+  const [profilePhotoProcessing, setProfilePhotoProcessing] = useState(false);
+  const [profileCropOpen, setProfileCropOpen] = useState(false);
   const [removePhoto, setRemovePhoto] = useState(false);
   const photoInputRef = useRef(null);
   const [privacyReadAt, setPrivacyReadAt] = useState(null);
@@ -131,25 +142,61 @@ export default function AccountPrivacy() {
   const handlePhotoSelect = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    if (!allowedTypes.includes(file.type)) {
+    if (!IMAGE_ACCEPTED_TYPES.includes(file.type)) {
       setProfileErr('Only JPEG, PNG, GIF, or WebP images are allowed.');
       return;
     }
-    if (file.size > 2 * 1024 * 1024) {
-      setProfileErr('Profile photo must be under 2 MB.');
-      return;
-    }
-    setProfileErr('');
+    setProfileErr(
+      file.size > PROFILE_MAX_SIZE_BYTES
+        ? `Profile photo is ${formatFileSize(file.size)}. Compress or crop it before saving.`
+        : ''
+    );
+    if (profilePhotoPreview) URL.revokeObjectURL(profilePhotoPreview);
     setProfilePhotoFile(file);
     setProfilePhotoPreview(URL.createObjectURL(file));
     setRemovePhoto(false);
+  };
+
+  const processProfilePhoto = async (cropSquare = false) => {
+    if (!profilePhotoFile) return;
+    setProfilePhotoProcessing(true);
+    setProfileErr('');
+    try {
+      const processed = await compressImageFile(profilePhotoFile, {
+        targetBytes: PROFILE_TARGET_SIZE_BYTES,
+        cropSquare,
+        maxWidth: 1200,
+        maxHeight: 1200,
+      });
+      setProfilePhotoFile(processed);
+      if (profilePhotoPreview) URL.revokeObjectURL(profilePhotoPreview);
+      setProfilePhotoPreview(URL.createObjectURL(processed));
+      if (processed.size > PROFILE_MAX_SIZE_BYTES) {
+        setProfileErr(`${processed.name} is still larger than ${PROFILE_MAX_SIZE_LABEL}. Try crop + compress.`);
+      }
+    } catch (err) {
+      setProfileErr(err.message || 'Could not process profile photo.');
+    } finally {
+      setProfilePhotoProcessing(false);
+    }
+  };
+
+  const applyCroppedProfilePhoto = (cropped) => {
+    setProfilePhotoFile(cropped);
+    if (profilePhotoPreview) URL.revokeObjectURL(profilePhotoPreview);
+    setProfilePhotoPreview(URL.createObjectURL(cropped));
+    setProfileCropOpen(false);
+    setProfileErr('');
   };
 
   const handleProfileSave = async (e) => {
     e.preventDefault();
     setProfileErr('');
     setProfileMsg('');
+    if (profilePhotoFile?.size > PROFILE_MAX_SIZE_BYTES) {
+      setProfileErr('Please compress or crop the profile photo before saving.');
+      return;
+    }
     setProfileSaving(true);
     try {
       const payload = {
@@ -216,18 +263,15 @@ export default function AccountPrivacy() {
     setExporting(true);
     try {
       const res = await accountApi.exportData();
-      const blob = new Blob([res.data], { type: 'application/json' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.style.display = 'none';
-      a.href = url;
-      a.download = `jagiris-family-export-${Date.now()}.json`;
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-      }, 200);
+      const fallback = `jagiris-family-members-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      const filename = filenameFromContentDisposition(res.headers['content-disposition'], fallback);
+      const blob = new Blob([res.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const result = await downloadBlobFile(blob, filename);
+      if (result?.savedTo) {
+        alert(`Download complete.\n\nSaved to ${result.savedTo}:\n${filename}`);
+      }
     } catch (err) {
       alert(getApiErrorMessage(err, 'Export failed.'));
     } finally {
@@ -252,24 +296,26 @@ export default function AccountPrivacy() {
 
   return (
     <div className="w-full max-w-none space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Account &amp; privacy</h1>
-        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-          Signed in as{' '}
-          <span className="font-medium text-gray-800 dark:text-gray-200">
-            {profileUser?.username || user?.username}
-          </span>
-          {(profileUser?.email || user?.email) ? (
-            <>
-              {' '}
-              · {profileUser?.email || user?.email}
-            </>
-          ) : null}
-        </p>
-        {privacyLoadErr && (
-          <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">{privacyLoadErr}</p>
-        )}
-      </div>
+      <ModulePageHeader
+        label="Account & privacy"
+        description={
+          <>
+            Signed in as{' '}
+            <span className="font-medium text-gray-800 dark:text-gray-200">
+              {profileUser?.username || user?.username}
+            </span>
+            {(profileUser?.email || user?.email) ? (
+              <>
+                {' '}
+                · {profileUser?.email || user?.email}
+              </>
+            ) : null}
+          </>
+        }
+      />
+      {privacyLoadErr && (
+        <p className="-mt-4 text-sm text-amber-700 dark:text-amber-300">{privacyLoadErr}</p>
+      )}
 
       <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-soft dark:border-gray-800 dark:bg-gray-900">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -390,8 +436,38 @@ export default function AccountPrivacy() {
                   </button>
                 )}
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  JPEG, PNG, GIF, or WebP. Max 2 MB. Optional.
+                  JPEG, PNG, GIF, or WebP. Max {PROFILE_MAX_SIZE_LABEL}. Optional.
                 </p>
+                {profilePhotoFile && (
+                  <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3 text-left dark:border-gray-700 dark:bg-gray-800/60">
+                    <p className="text-xs text-gray-600 dark:text-gray-300">
+                      Selected: <span className="font-medium">{formatFileSize(profilePhotoFile.size)}</span>
+                      {profilePhotoFile.size > PROFILE_MAX_SIZE_BYTES ? (
+                        <span className="ml-1 font-medium text-amber-700 dark:text-amber-300">
+                          (over {PROFILE_MAX_SIZE_LABEL})
+                        </span>
+                      ) : null}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => processProfilePhoto(false)}
+                        disabled={profilePhotoProcessing}
+                        className="rounded-md bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+                      >
+                        {profilePhotoProcessing ? 'Processing...' : `Compress to ${PROFILE_TARGET_SIZE_LABEL}`}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setProfileCropOpen(true)}
+                        disabled={profilePhotoProcessing}
+                        className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                      >
+                        Crop image
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -504,10 +580,10 @@ export default function AccountPrivacy() {
             <div className="flex flex-wrap gap-2">
               <button
                 type="submit"
-                disabled={profileSaving}
+                disabled={profileSaving || profilePhotoProcessing}
                 className="rounded-lg bg-primary-600 px-4 py-2 font-medium text-white hover:bg-primary-700 disabled:opacity-60"
               >
-                {profileSaving ? 'Saving…' : 'Save profile'}
+                {profileSaving ? 'Saving…' : profilePhotoProcessing ? 'Processing photo…' : 'Save profile'}
               </button>
               <button
                 type="button"
@@ -520,39 +596,49 @@ export default function AccountPrivacy() {
             </div>
           </form>
         )}
+        <ImageCropModal
+          open={profileCropOpen}
+          file={profilePhotoFile}
+          title="Crop profile photo"
+          targetBytes={PROFILE_TARGET_SIZE_BYTES}
+          onClose={() => setProfileCropOpen(false)}
+          onApply={applyCroppedProfilePhoto}
+        />
         {profileMsg && !profileEditing ? (
           <p className="mt-3 text-sm text-green-600 dark:text-green-400">{profileMsg}</p>
         ) : null}
       </section>
 
-      <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-soft dark:border-gray-800 dark:bg-gray-900">
-        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white">
-          <ClipboardCheck className="h-5 w-5 text-primary-600" />
-          Privacy record
-        </h2>
-        <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
-          Your choices are stored in the <code className="rounded bg-gray-100 px-1 text-xs dark:bg-gray-800">user_privacy_settings</code>{' '}
-          table (one row per user). Use the button below to record that you have read this screen&apos;s privacy guidance.
-        </p>
-        {privacyReadAt ? (
-          <p className="text-sm text-gray-700 dark:text-gray-300">
-            Privacy notice last acknowledged: <strong>{formatTs(privacyReadAt)}</strong>
+      {SHOW_PRIVACY_RECORD ? (
+        <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-soft dark:border-gray-800 dark:bg-gray-900">
+          <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white">
+            <ClipboardCheck className="h-5 w-5 text-primary-600" />
+            Privacy record
+          </h2>
+          <p className="mb-4 max-w-3xl text-sm leading-6 text-gray-600 dark:text-gray-400">
+            Privacy notice acknowledgments are stored for this account. Use this action only after reading the current
+            privacy notes below.
           </p>
-        ) : (
-          <p className="text-sm text-gray-600 dark:text-gray-400">You have not recorded an acknowledgment yet.</p>
-        )}
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={handleAcknowledgePrivacy}
-            disabled={ackLoading}
-            className="rounded-lg bg-primary-600 px-4 py-2 font-medium text-white hover:bg-primary-700 disabled:opacity-60"
-          >
-            {ackLoading ? 'Saving…' : 'I have read the privacy notes below'}
-          </button>
-          {ackMsg && <span className="text-sm text-green-600 dark:text-green-400">{ackMsg}</span>}
-        </div>
-      </section>
+          {privacyReadAt ? (
+            <p className="text-sm text-gray-700 dark:text-gray-300">
+              Last acknowledged: <strong>{formatTs(privacyReadAt)}</strong>
+            </p>
+          ) : (
+            <p className="text-sm text-gray-600 dark:text-gray-400">No privacy acknowledgment has been recorded yet.</p>
+          )}
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={handleAcknowledgePrivacy}
+              disabled={ackLoading}
+              className="rounded-lg bg-primary-600 px-4 py-2 font-medium text-white hover:bg-primary-700 disabled:opacity-60"
+            >
+              {ackLoading ? 'Saving…' : 'Acknowledge privacy notice'}
+            </button>
+            {ackMsg && <span className="text-sm text-green-600 dark:text-green-400">{ackMsg}</span>}
+          </div>
+        </section>
+      ) : null}
 
       <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-soft dark:border-gray-800 dark:bg-gray-900">
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white">
@@ -596,24 +682,26 @@ export default function AccountPrivacy() {
         </form>
       </section>
 
-      <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-soft dark:border-gray-800 dark:bg-gray-900">
-        <h2 className="mb-2 flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white">
-          <Download className="h-5 w-5 text-primary-600" />
-          Your data
-        </h2>
-        <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
-          Download a JSON snapshot of family members, events, and gallery metadata. Photos remain on the server; paths
-          are included in the export for your records.
-        </p>
-        <button
-          type="button"
-          onClick={handleExport}
-          disabled={exporting}
-          className="rounded-lg border border-primary-600 px-4 py-2 font-medium text-primary-700 hover:bg-primary-50 disabled:opacity-60 dark:text-primary-300 dark:hover:bg-primary-950/40"
-        >
-          {exporting ? 'Preparing…' : 'Download data export'}
-        </button>
-      </section>
+      {isAdmin ? (
+        <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-soft dark:border-gray-800 dark:bg-gray-900">
+          <h2 className="mb-2 flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white">
+            <Download className="h-5 w-5 text-primary-600" />
+            Family members export
+          </h2>
+          <p className="mb-4 max-w-3xl text-sm leading-6 text-gray-600 dark:text-gray-400">
+            Download an Excel file (.xlsx) with family member records only. On mobile, the file is saved to your
+            Downloads folder. Events, gallery metadata, and photo files are not included in this export.
+          </p>
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={exporting}
+            className="rounded-lg border border-primary-600 px-4 py-2 font-medium text-primary-700 hover:bg-primary-50 disabled:opacity-60 dark:text-primary-300 dark:hover:bg-primary-950/40"
+          >
+            {exporting ? 'Preparing Excel…' : 'Download members Excel'}
+          </button>
+        </section>
+      ) : null}
 
       <section className="rounded-2xl border border-red-200 bg-red-50/50 p-6 dark:border-red-900/40 dark:bg-red-950/20">
         <h2 className="mb-2 flex items-center gap-2 text-lg font-semibold text-red-900 dark:text-red-200">
@@ -677,6 +765,13 @@ export default function AccountPrivacy() {
           <Shield className="h-5 w-5 text-gray-500" />
           Privacy notes
         </h2>
+        <p className="mb-3 text-sm text-gray-600 dark:text-gray-400">
+          Read our full{' '}
+          <Link to="/privacy-policy" className="font-medium text-primary-600 hover:underline dark:text-primary-400">
+            Privacy Policy
+          </Link>{' '}
+          for details on data collection, third-party services, retention, and your choices.
+        </p>
         <ul className="list-inside list-disc space-y-2 text-sm text-gray-600 dark:text-gray-400">
           <li>Use a strong, unique password and keep your device locked when others may access it.</li>
           <li>Exports may contain personal data—store files securely and delete copies you no longer need.</li>

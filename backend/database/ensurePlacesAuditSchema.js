@@ -106,6 +106,8 @@ async function ensurePlacesAuditSchema() {
   `);
 
   await db.query('ALTER TABLE events ADD COLUMN IF NOT EXISTS family_id INTEGER REFERENCES families(id) ON DELETE CASCADE');
+  await db.query('ALTER TABLE events ADD COLUMN IF NOT EXISTS image_path TEXT');
+  await db.query('ALTER TABLE events ADD COLUMN IF NOT EXISTS created_by INTEGER REFERENCES users(id) ON DELETE SET NULL');
   await db.query('ALTER TABLE photos ADD COLUMN IF NOT EXISTS family_id INTEGER REFERENCES families(id) ON DELETE CASCADE');
   await db.query('ALTER TABLE places ADD COLUMN IF NOT EXISTS family_id INTEGER REFERENCES families(id) ON DELETE CASCADE');
 
@@ -129,17 +131,22 @@ async function ensurePlacesAuditSchema() {
   `);
 
   // Link legacy rows to a family. Prefer creator/owner family; fallback to first available family.
+  // Cast both sides to text to tolerate created_by / updated_by stored as VARCHAR on older schemas.
   await db.query(`
     UPDATE family_members fm
     SET family_id = COALESCE(
       (SELECT fm2.family_id
        FROM family_memberships fm2
-       WHERE fm2.user_id = fm.created_by
+       WHERE fm2.user_id::text = fm.created_by::text
+         AND fm.created_by IS NOT NULL
+         AND TRIM(fm.created_by::text) <> ''
        ORDER BY fm2.family_id
        LIMIT 1),
       (SELECT fm3.family_id
        FROM family_memberships fm3
-       WHERE fm3.user_id = fm.updated_by
+       WHERE fm3.user_id::text = fm.updated_by::text
+         AND fm.updated_by IS NOT NULL
+         AND TRIM(fm.updated_by::text) <> ''
        ORDER BY fm3.family_id
        LIMIT 1),
       (SELECT id FROM families ORDER BY id LIMIT 1)
@@ -241,7 +248,7 @@ async function ensurePlacesAuditSchema() {
     SET family_id = COALESCE(
       (SELECT fm.family_id
        FROM family_members fm
-       WHERE fm.birth_place_id = p.id OR fm.residence_place_id = p.id
+       WHERE fm.birth_place_id::text = p.id::text OR fm.residence_place_id::text = p.id::text
        ORDER BY fm.id
        LIMIT 1),
       (SELECT id FROM families ORDER BY id LIMIT 1)
@@ -251,6 +258,7 @@ async function ensurePlacesAuditSchema() {
 
   await db.query('CREATE INDEX IF NOT EXISTS idx_family_members_family_id ON family_members (family_id)');
   await db.query('CREATE INDEX IF NOT EXISTS idx_events_family_id ON events (family_id)');
+  await db.query('CREATE INDEX IF NOT EXISTS idx_events_created_by ON events (created_by)');
   await db.query('CREATE INDEX IF NOT EXISTS idx_photos_family_id ON photos (family_id)');
   await db.query('CREATE INDEX IF NOT EXISTS idx_places_family_id ON places (family_id)');
 
@@ -287,6 +295,186 @@ async function ensurePlacesAuditSchema() {
   await db.query('CREATE INDEX IF NOT EXISTS idx_family_members_residence_place_id ON family_members (residence_place_id)');
   await db.query('CREATE INDEX IF NOT EXISTS idx_family_members_created_by ON family_members (created_by)');
   await db.query('CREATE INDEX IF NOT EXISTS idx_family_members_updated_by ON family_members (updated_by)');
+
+  // ── Push notification infrastructure ──
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS push_notification_tokens (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token TEXT NOT NULL,
+      platform VARCHAR(16) NOT NULL DEFAULT 'android',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (user_id, token)
+    )
+  `);
+  await db.query('CREATE INDEX IF NOT EXISTS idx_push_tokens_user_id ON push_notification_tokens (user_id)');
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS announcements (
+      id SERIAL PRIMARY KEY,
+      family_id INTEGER REFERENCES families(id) ON DELETE CASCADE,
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      title VARCHAR(500) NOT NULL,
+      body TEXT,
+      target_audience VARCHAR(16) NOT NULL DEFAULT 'all',
+      sent_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await db.query('CREATE INDEX IF NOT EXISTS idx_announcements_family_id ON announcements (family_id)');
+  await db.query(
+    "ALTER TABLE announcements ADD COLUMN IF NOT EXISTS target_audience VARCHAR(16) NOT NULL DEFAULT 'all'"
+  );
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS notification_deliveries (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      notification_type VARCHAR(64) NOT NULL,
+      reference_key VARCHAR(255) NOT NULL,
+      delivered_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (user_id, notification_type, reference_key)
+    )
+  `);
+  await db.query('CREATE INDEX IF NOT EXISTS idx_notif_deliveries_lookup ON notification_deliveries (user_id, notification_type, reference_key)');
+
+  // ── Gallery album batches ──
+
+  await db.query('ALTER TABLE photos ADD COLUMN IF NOT EXISTS upload_batch_id UUID');
+  await db.query(
+    'CREATE INDEX IF NOT EXISTS idx_photos_upload_batch_id ON photos (upload_batch_id)'
+  );
+
+  // ── In-app notification feed (header bell) ──
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS user_notifications (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      family_id INTEGER NOT NULL REFERENCES families(id) ON DELETE CASCADE,
+      type VARCHAR(32) NOT NULL,
+      title VARCHAR(500) NOT NULL,
+      body TEXT,
+      entity_type VARCHAR(64),
+      entity_id INTEGER,
+      link_path VARCHAR(255),
+      actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      reference_key VARCHAR(255),
+      read_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await db.query(
+    'CREATE INDEX IF NOT EXISTS idx_user_notifications_user_unread ON user_notifications (user_id, read_at, created_at DESC)'
+  );
+  await db.query(
+    'CREATE INDEX IF NOT EXISTS idx_user_notifications_family ON user_notifications (family_id, created_at DESC)'
+  );
+  await db.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_user_notifications_dedup
+    ON user_notifications (user_id, type, reference_key)
+    WHERE reference_key IS NOT NULL
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS user_feed_dismissals (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      family_id INTEGER NOT NULL REFERENCES families(id) ON DELETE CASCADE,
+      reference_key VARCHAR(255) NOT NULL,
+      dismissed_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (user_id, family_id, reference_key)
+    )
+  `);
+
+  // ── Private 1-to-1 chat ──
+
+  await db.query(`
+    ALTER TABLE family_members
+      ADD COLUMN IF NOT EXISTS linked_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
+  `);
+  await db.query(
+    'CREATE INDEX IF NOT EXISTS idx_family_members_linked_user ON family_members (linked_user_id)'
+  );
+  await db.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_family_members_one_link_per_user
+    ON family_members (family_id, linked_user_id)
+    WHERE linked_user_id IS NOT NULL
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS conversations (
+      id SERIAL PRIMARY KEY,
+      family_id INTEGER NOT NULL REFERENCES families(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_message_at TIMESTAMPTZ,
+      last_message_preview TEXT
+    )
+  `);
+  await db.query(
+    'CREATE INDEX IF NOT EXISTS idx_conversations_family_last ON conversations (family_id, last_message_at DESC NULLS LAST)'
+  );
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS conversation_members (
+      conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      last_read_at TIMESTAMPTZ,
+      PRIMARY KEY (conversation_id, user_id)
+    )
+  `);
+  await db.query(
+    'CREATE INDEX IF NOT EXISTS idx_conversation_members_user ON conversation_members (user_id)'
+  );
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS messages (
+      id SERIAL PRIMARY KEY,
+      conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      sender_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      body TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      delivered_at TIMESTAMPTZ
+    )
+  `);
+  await db.query(
+    'CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON messages (conversation_id, created_at DESC)'
+  );
+  await db.query('CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages (sender_user_id)');
+
+  await db.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ');
+  await db.query(
+    'ALTER TABLE conversation_members ADD COLUMN IF NOT EXISTS cleared_at TIMESTAMPTZ'
+  );
+
+  await db.query(
+    `ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_type TEXT NOT NULL DEFAULT 'text'`
+  );
+  await db.query(`ALTER TABLE messages ALTER COLUMN body DROP NOT NULL`);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS message_attachments (
+      id SERIAL PRIMARY KEY,
+      message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+      image_path TEXT NOT NULL,
+      width INTEGER,
+      height INTEGER,
+      byte_size INTEGER,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await db.query(
+    'CREATE INDEX IF NOT EXISTS idx_message_attachments_message ON message_attachments (message_id, sort_order)'
+  );
+
+  await db.query(
+    'ALTER TABLE conversation_members ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ'
+  );
+  await db.query(
+    'ALTER TABLE conversation_members ADD COLUMN IF NOT EXISTS inbox_removed_at TIMESTAMPTZ'
+  );
 }
 
 module.exports = { ensurePlacesAuditSchema };

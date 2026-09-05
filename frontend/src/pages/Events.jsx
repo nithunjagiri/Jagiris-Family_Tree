@@ -1,44 +1,90 @@
-import { useState, useEffect } from 'react';
-import { Calendar, Plus } from 'lucide-react';
-import { eventsApi } from '../services/api';
-import { cn } from '../lib/utils';
+import { useState, useEffect, useMemo } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Plus } from 'lucide-react';
+import { eventsApi, familyMembersApi } from '../services/api';
 import { getApiErrorMessage } from '../lib/apiErrorMessage';
 import { eventCalendarParts } from '../lib/calendarDate';
+import { resolveBackendPublicUrl } from '../lib/backendOrigin';
+import { upcomingFamilyDates } from '../lib/dashboardAnalytics';
+import { cn } from '../lib/utils';
+import { useAuth } from '../context/AuthContext';
+import {
+  absoluteOccasionTiming,
+  anniversaryWishTextForTiming,
+  birthdayWishTextForTiming,
+  senderDisplayName,
+} from '../lib/wishMessages';
+import ModulePageHeader from '../components/ModulePageHeader';
+import EventForm from '../components/EventForm';
+import WishActions from '../components/WishActions';
 
 export default function Events() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = searchParams.get('tab') === 'birthdays' ? 'birthdays' : 'events';
+
   const [events, setEvents] = useState([]);
+  const [members, setMembers] = useState([]);
   const [upcoming, setUpcoming] = useState(true);
-  const [loading, setLoading] = useState(true);
+  const [eventsLoading, setEventsLoading] = useState(true);
+  const [datesLoading, setDatesLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [title, setTitle] = useState('');
-  const [event_date, setEventDate] = useState('');
-  const [description, setDescription] = useState('');
   const [submitError, setSubmitError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const load = () => {
-    setLoading(true);
+  const setTab = (next) => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (next === 'birthdays') nextParams.set('tab', 'birthdays');
+    else nextParams.delete('tab');
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  const loadEvents = () => {
+    setEventsLoading(true);
     eventsApi
       .list(upcoming)
       .then((r) => setEvents(r.data || []))
-      .finally(() => setLoading(false));
+      .finally(() => setEventsLoading(false));
   };
 
   useEffect(() => {
-    load();
-  }, [upcoming]);
+    if (tab !== 'events') return;
+    loadEvents();
+  }, [tab, upcoming]);
 
-  const handleAdd = async (e) => {
-    e.preventDefault();
+  useEffect(() => {
+    if (tab !== 'birthdays') return;
+    let cancelled = false;
+    setDatesLoading(true);
+    familyMembersApi
+      .list()
+      .then((r) => {
+        if (!cancelled) setMembers(Array.isArray(r.data) ? r.data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setMembers([]);
+      })
+      .finally(() => {
+        if (!cancelled) setDatesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab]);
+
+  const familyDates = useMemo(() => upcomingFamilyDates(members, 60), [members]);
+
+  const handleAdd = async (data, imageFile) => {
     setSubmitError('');
     setSubmitting(true);
     try {
-      await eventsApi.add({ title, event_date, description: description || null });
-      setTitle('');
-      setEventDate('');
-      setDescription('');
+      const res = await eventsApi.add(data, imageFile);
       setShowForm(false);
-      load();
+      loadEvents();
+      if (res.data?.id) {
+        navigate(`/events/${res.data.id}`);
+      }
     } catch (err) {
       setSubmitError(getApiErrorMessage(err, 'Failed to add event'));
     } finally {
@@ -46,139 +92,177 @@ export default function Events() {
     }
   };
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Events</h1>
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-            <input
-              type="checkbox"
-              checked={upcoming}
-              onChange={(e) => setUpcoming(e.target.checked)}
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-            />
-            Upcoming only
-          </label>
-          <button
-            type="button"
-            onClick={() => setShowForm(true)}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 font-medium text-white transition-colors hover:bg-primary-700"
-          >
-            <Plus className="h-5 w-5" />
-            Add Event
-          </button>
-        </div>
-      </div>
+  const tabClass = (active) =>
+    cn(
+      'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+      active
+        ? 'bg-primary-600 text-white'
+        : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'
+    );
 
-      {showForm && (
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-soft dark:border-gray-800 dark:bg-gray-900">
-          <h3 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">Add event</h3>
-          <form onSubmit={handleAdd} className="space-y-4">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Title *
+  return (
+    <div className="space-y-6 pb-safe">
+      <ModulePageHeader
+        label="Events"
+        stackActionsOnMobile
+        actions={
+          tab === 'events' ? (
+            <>
+              <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                <input
+                  type="checkbox"
+                  checked={upcoming}
+                  onChange={(e) => setUpcoming(e.target.checked)}
+                  className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                />
+                Upcoming only
               </label>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                required
-                placeholder="e.g. Wedding Anniversary"
-                className={cn(
-                  'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 dark:border-gray-600 dark:bg-gray-800 dark:text-white'
-                )}
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Date *
-              </label>
-              <input
-                type="date"
-                value={event_date}
-                onChange={(e) => setEventDate(e.target.value)}
-                required
-                className={cn(
-                  'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 dark:border-gray-600 dark:bg-gray-800 dark:text-white'
-                )}
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Description
-              </label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={2}
-                className={cn(
-                  'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 dark:border-gray-600 dark:bg-gray-800 dark:text-white'
-                )}
-              />
-            </div>
-            {submitError && <p className="text-sm text-red-600 dark:text-red-400">{submitError}</p>}
-            <div className="flex gap-2">
-              <button
-                type="submit"
-                disabled={submitting}
-                className="rounded-lg bg-primary-600 px-4 py-2 font-medium text-white hover:bg-primary-700 disabled:opacity-50"
-              >
-                {submitting ? 'Adding...' : 'Add'}
-              </button>
               <button
                 type="button"
-                onClick={() => setShowForm(false)}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300"
+                onClick={() => {
+                  setSubmitError('');
+                  setShowForm(true);
+                }}
+                className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 font-medium text-white transition-colors hover:bg-primary-700"
               >
-                Cancel
+                <Plus className="h-5 w-5" />
+                Add Event
               </button>
-            </div>
-          </form>
-        </div>
+            </>
+          ) : null
+        }
+      />
+
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className={tabClass(tab === 'birthdays')} onClick={() => setTab('birthdays')}>
+          Birthdays & anniversaries
+        </button>
+        <button type="button" className={tabClass(tab === 'events')} onClick={() => setTab('events')}>
+          Events
+        </button>
+      </div>
+
+      {tab === 'events' && showForm && (
+        <EventForm
+          mode="add"
+          heading="Add event"
+          onSubmit={handleAdd}
+          onCancel={() => {
+            setShowForm(false);
+            setSubmitError('');
+          }}
+          submitLabel="Add"
+          submitting={submitting}
+          error={submitError}
+        />
       )}
 
-      {/* Calendar-style event list */}
-      <div className="rounded-2xl border border-gray-200 bg-white shadow-soft dark:border-gray-800 dark:bg-gray-900 dark:shadow-soft-dark">
-        {loading ? (
-          <div className="flex justify-center py-12">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
-          </div>
-        ) : (
-          <ul className="divide-y divide-gray-200 dark:divide-gray-700">
-            {events.length === 0 && (
-              <li className="py-12 text-center text-gray-500 dark:text-gray-400">No events found.</li>
-            )}
-            {events.map((ev) => {
-              const parts = eventCalendarParts(ev.event_date);
-              return (
-              <li
-                key={ev.id}
-                className="flex gap-4 p-4 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50"
-              >
-                <div className="flex shrink-0 flex-col items-center justify-center rounded-xl bg-primary-100 px-3 py-2 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">
-                  <span className="text-xs font-medium uppercase">
-                    {parts?.monthShort ?? '—'}
-                  </span>
-                  <span className="text-xl font-bold">
-                    {parts?.day ?? '—'}
-                  </span>
-                  <span className="text-xs">
-                    {parts?.year ?? '—'}
-                  </span>
-                </div>
-                <div className="min-w-0 flex-1">
-                  <h3 className="font-semibold text-gray-900 dark:text-white">{ev.title}</h3>
-                  {ev.description && (
-                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{ev.description}</p>
-                  )}
-                </div>
-              </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
+      {tab === 'birthdays' ? (
+        <div className="rounded-2xl border border-gray-200 bg-white shadow-soft dark:border-gray-800 dark:bg-gray-900 dark:shadow-soft-dark">
+          {datesLoading ? (
+            <div className="flex justify-center py-12">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
+            </div>
+          ) : (
+            <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+              {familyDates.length === 0 ? (
+                <li className="py-12 text-center text-gray-500 dark:text-gray-400">
+                  No upcoming birthdays or anniversaries in the next 60 days.
+                </li>
+              ) : (
+                familyDates.map((item) => {
+                  const parts = eventCalendarParts(item.nextYmd);
+                  const occasionTiming = absoluteOccasionTiming(item.nextYmd);
+                  const wishText =
+                    item.type === 'anniversary'
+                      ? anniversaryWishTextForTiming(item.title, senderDisplayName(user), occasionTiming)
+                      : birthdayWishTextForTiming(item.title, senderDisplayName(user), occasionTiming);
+                  return (
+                    <li key={item.key} className="flex gap-4 p-4">
+                      <Link
+                        to={`/family-members/${item.member.id}`}
+                        className="flex min-w-0 flex-1 gap-4"
+                      >
+                        <div className="flex shrink-0 flex-col items-center justify-center rounded-xl bg-primary-100 px-3 py-2 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">
+                          <span className="text-xs font-medium uppercase">{parts?.monthShort ?? '—'}</span>
+                          <span className="text-xl font-bold">{parts?.day ?? '—'}</span>
+                          <span className="text-xs">{parts?.year ?? '—'}</span>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-semibold text-gray-900 dark:text-white">{item.title}</h3>
+                          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                            {item.type === 'anniversary' ? 'Anniversary' : 'Birthday'}
+                            {parts?.weekdayLong ? ` · ${parts.weekdayLong}` : ''}
+                          </p>
+                        </div>
+                      </Link>
+                      <div className="flex shrink-0 flex-col items-end justify-center gap-1.5 self-center">
+                        {occasionTiming ? (
+                          <WishActions compact member={item.member} message={wishText} />
+                        ) : null}
+                      </div>
+                    </li>
+                  );
+                })
+              )}
+            </ul>
+          )}
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-gray-200 bg-white shadow-soft dark:border-gray-800 dark:bg-gray-900 dark:shadow-soft-dark">
+          {eventsLoading ? (
+            <div className="flex justify-center py-12">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
+            </div>
+          ) : (
+            <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+              {events.length === 0 && (
+                <li className="py-12 text-center text-gray-500 dark:text-gray-400">No events found.</li>
+              )}
+              {events.map((ev) => {
+                const parts = eventCalendarParts(ev.event_date);
+                return (
+                  <li
+                    key={ev.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() =>
+                      navigate(`/events/${ev.id}`, { state: { event: ev, returnTo: '/events' } })
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        navigate(`/events/${ev.id}`, { state: { event: ev, returnTo: '/events' } });
+                      }
+                    }}
+                    className="flex cursor-pointer gap-4 p-4 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                  >
+                    <div className="flex shrink-0 flex-col items-center justify-center rounded-xl bg-primary-100 px-3 py-2 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">
+                      <span className="text-xs font-medium uppercase">{parts?.monthShort ?? '—'}</span>
+                      <span className="text-xl font-bold">{parts?.day ?? '—'}</span>
+                      <span className="text-xs">{parts?.year ?? '—'}</span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-semibold text-gray-900 dark:text-white">{ev.title}</h3>
+                      {ev.description && (
+                        <p className="mt-1 line-clamp-2 text-sm text-gray-600 dark:text-gray-300">{ev.description}</p>
+                      )}
+                      {ev.image_path && (
+                        <img
+                          src={resolveBackendPublicUrl(ev.image_path)}
+                          alt=""
+                          className="mt-3 max-h-32 w-full rounded-xl object-cover sm:max-w-xs"
+                        />
+                      )}
+                      <p className="mt-2 text-xs text-primary-600 dark:text-primary-400">Tap for full details</p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   );
 }

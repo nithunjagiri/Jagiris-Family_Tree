@@ -1,18 +1,28 @@
 {
   "name": "jagiris-family-frontend",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:android": "vite build --mode capacitor && npx cap sync android",
+    "open:android": "npx cap open android",
+    "sync:android": "npx cap sync android",
+    "icons:android": "python resources/_prepare_assets.py && npx capacitor-assets generate --android && python resources/_patch_adaptive_inset.py && python resources/_apply_large_mipmaps.py",
+    "apk:debug": "npm run build:android && cd android && gradlew.bat assembleDebug",
+    "apk:release": "npm run build:android && cd android && gradlew.bat assembleRelease"
   },
   "dependencies": {
     "@capacitor/android": "^8.3.4",
     "@capacitor/app": "^8.1.0",
+    "@capacitor/camera": "^8.2.3",
     "@capacitor/cli": "^8.3.4",
     "@capacitor/core": "^8.3.4",
+    "@capacitor/filesystem": "^8.1.2",
+    "@capacitor/push-notifications": "^8.1.1",
+    "@capacitor/share": "^8.0.1",
     "axios": "^1.6.2",
     "clsx": "^2.0.0",
     "leaflet": "^1.9.4",
@@ -23,9 +33,11 @@
     "react-leaflet": "^4.2.1",
     "react-router-dom": "^6.21.0",
     "recharts": "^2.15.0",
+    "socket.io-client": "^4.8.3",
     "tailwind-merge": "^2.2.0"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@types/react": "^18.2.43",
     "@types/react-dom": "^18.2.17",
     "@vitejs/plugin-react": "^4.7.0",

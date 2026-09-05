@@ -24,9 +24,8 @@ export function setActiveFamilyId(familyId) {
 }
 
 /**
- * Pick the shared family workspace for API headers: prefer the membership with the most
- * `member_count` (from `/api/account/families`), then name hints, then stable id order.
- * Falls back to name-only heuristics when counts are absent (older server).
+ * Pick the shared family workspace for API headers. Matches server `pickPrimaryFamily`:
+ * highest `member_count`, then lowest `family_id`. Name heuristics only when counts are absent.
  */
 export function resolveJagirisFamilyId(families) {
   const rows = Array.isArray(families) ? families : [];
@@ -35,20 +34,14 @@ export function resolveJagirisFamilyId(families) {
   const hasCounts = rows.some((f) => Number(f.member_count) > 0);
 
   if (hasCounts) {
-    const withCounts = rows.map((f) => ({
-      ...f,
-      member_count: Number(f.member_count) || 0,
-    }));
-    const maxC = Math.max(...withCounts.map((f) => f.member_count));
-    const candidates = withCounts.filter((f) => f.member_count === maxC);
-    if (candidates.length === 1) return Number(candidates[0].family_id);
-    const exact = candidates.find((f) => norm(f.name) === 'jagiris family');
-    if (exact) return Number(exact.family_id);
-    const fuzzy = candidates.find((f) => norm(f.name).includes('jagiris'));
-    if (fuzzy) return Number(fuzzy.family_id);
-    return Number(
-      candidates.slice().sort((a, b) => Number(a.family_id) - Number(b.family_id))[0].family_id
-    );
+    const primary = rows
+      .map((f) => ({ ...f, member_count: Number(f.member_count) || 0 }))
+      .slice()
+      .sort((a, b) => {
+        if (b.member_count !== a.member_count) return b.member_count - a.member_count;
+        return Number(a.family_id) - Number(b.family_id);
+      })[0];
+    return Number(primary.family_id);
   }
 
   const exact = rows.find((f) => norm(f.name) === 'jagiris family');
@@ -133,6 +126,10 @@ export const familyMembersApi = {
     return api.put(`/family-members/${id}`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
   delete: (id) => api.delete(`/family-members/${id}`),
+  listLinkableUsers: (excludeMemberId) =>
+    api.get('/family-members/meta/linkable-users', {
+      params: excludeMemberId ? { excludeMemberId } : {},
+    }),
 };
 
 export const photosApi = {
@@ -151,7 +148,26 @@ export const photosApi = {
 
 export const eventsApi = {
   list: (upcoming) => api.get('/events', { params: upcoming ? { upcoming: 'true' } : {} }),
-  add: (data) => api.post('/events', data),
+  get: (id) => api.get(`/events/${id}`),
+  add: (data, imageFile) => {
+    if (!imageFile) return api.post('/events', data);
+    const form = new FormData();
+    Object.entries(data).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') form.append(key, value);
+    });
+    form.append('image', imageFile);
+    return api.post('/events', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+  update: (id, data, imageFile) => {
+    if (!imageFile) return api.put(`/events/${id}`, data);
+    const form = new FormData();
+    Object.entries(data).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') form.append(key, value);
+    });
+    form.append('image', imageFile);
+    return api.put(`/events/${id}`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+  delete: (id) => api.delete(`/events/${id}`),
 };
 
 export const familyTreeApi = {
@@ -160,7 +176,8 @@ export const familyTreeApi = {
 
 export const placesApi = {
   list: () => api.get('/places'),
-  membersByPlace: (place) => api.get('/places/members-by-place', { params: { place } }),
+  membersByPlace: (place, type = 'birth') =>
+    api.get('/places/members-by-place', { params: { place, type } }),
   create: (data) => api.post('/places', data),
   remove: (id) => api.delete(`/places/${id}`),
 };
@@ -187,6 +204,52 @@ export const accountApi = {
   exportData: () => api.get('/account/export', { responseType: 'blob' }),
   listFamilies: () => api.get('/account/families'),
   deleteAccount: (data) => api.post('/account/delete-account', data),
+};
+
+export const notificationsApi = {
+  registerToken: (token, platform = 'android') =>
+    api.post('/notifications/token', { token, platform }),
+  unregisterToken: (token) =>
+    api.delete('/notifications/token', { data: { token } }),
+  listAnnouncements: (params) =>
+    api.get('/notifications/announcements', { params }),
+  createAnnouncement: (data) =>
+    api.post('/notifications/announcements', data),
+  deleteAnnouncement: (id) =>
+    api.delete(`/notifications/announcements/${id}`),
+  listFeed: (params) => api.get('/notifications/feed', { params }),
+  markFeedRead: (id) => api.patch(`/notifications/feed/${encodeURIComponent(id)}/read`),
+  markAllFeedRead: () => api.patch('/notifications/feed/read-all'),
+  sendTestNotification: () => api.post('/notifications/feed/test'),
+};
+
+export const messagesApi = {
+  listThreads: (params) => api.get('/messages/threads', { params }),
+  unreadCount: () => api.get('/messages/threads/unread-count'),
+  openThread: (payload) => api.post('/messages/threads', payload),
+  listMessages: (id, params) => api.get(`/messages/threads/${id}/messages`, { params }),
+  send: (id, body) => api.post(`/messages/threads/${id}/messages`, { body }),
+  sendImages: (threadId, items, caption) => {
+    const form = new FormData();
+    items.forEach(({ file, width, height, byteSize }) => {
+      form.append('images', file);
+      form.append('width', String(width ?? ''));
+      form.append('height', String(height ?? ''));
+      form.append('byte_size', String(byteSize ?? file.size ?? ''));
+    });
+    if (caption?.trim()) form.append('body', caption.trim());
+    return api.post(`/messages/threads/${threadId}/messages/images`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000,
+    });
+  },
+  markRead: (id) => api.patch(`/messages/threads/${id}/read`),
+  deleteMessage: (threadId, messageId) =>
+    api.delete(`/messages/threads/${threadId}/messages/${messageId}`),
+  clearThread: (id) => api.post(`/messages/threads/${id}/clear`),
+  deleteChat: (id) => api.post(`/messages/threads/${id}/delete-chat`),
+  archiveThread: (id) => api.post(`/messages/threads/${id}/archive`),
+  unarchiveThread: (id) => api.post(`/messages/threads/${id}/unarchive`),
 };
 
 export const adminApi = {

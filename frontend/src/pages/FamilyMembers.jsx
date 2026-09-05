@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo, useId } from 'react';
+import { useState, useEffect, useMemo, useId, useCallback } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { UserPlus, Pencil, Trash2, User, Search, LayoutGrid, List, X } from 'lucide-react';
+import { UserPlus, Pencil, Trash2, User, Search, LayoutGrid, List, X, Filter } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { familyMembersApi } from '../services/api';
 import { cn } from '../lib/utils';
@@ -8,7 +8,14 @@ import { formatCalendarLong } from '../lib/calendarDate';
 import { HIDE_RELATION_NAMES_IN_UI } from '../lib/appDisplaySettings';
 import { resolveBackendPublicUrl } from '../lib/backendOrigin';
 import { getApiErrorMessage } from '../lib/apiErrorMessage';
-import { isDeceased } from '../lib/dashboardAnalytics';
+import {
+  filterMembers,
+  getUniquePlaces,
+  getUniqueSurnames,
+  hasActiveMemberFilters,
+} from '../lib/memberFilters';
+import ModulePageHeader from '../components/ModulePageHeader';
+import { useRestorePageState, useSavePageStateOnUnmount } from '../hooks/usePageStatePersistence';
 
 function displayName(m) {
   return [m.name, m.surname].filter(Boolean).join(' ') || m.name || '';
@@ -114,6 +121,10 @@ export default function FamilyMembers() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState('grid');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [surnameFilter, setSurnameFilter] = useState('');
+  const [placeFilter, setPlaceFilter] = useState('');
+  const [genderFilter, setGenderFilter] = useState('');
   const [saveFlash, setSaveFlash] = useState(null);
   const [lightboxPhoto, setLightboxPhoto] = useState(null);
 
@@ -143,24 +154,74 @@ export default function FamilyMembers() {
     navigate(location.pathname, { replace: true, state: {} });
   }, [location.state, location.pathname, navigate]);
 
-  const filteredMembers = useMemo(() => {
-    let result = members;
+  const applyRestoredPageState = useCallback(
+    (restored) => {
+      if (restored.surnameFilter != null) setSurnameFilter(String(restored.surnameFilter));
+      if (restored.placeFilter != null) setPlaceFilter(String(restored.placeFilter));
+      if (restored.genderFilter != null) setGenderFilter(String(restored.genderFilter));
+      if (restored.searchQuery != null) setSearchQuery(String(restored.searchQuery));
+      if (restored.viewMode === 'grid' || restored.viewMode === 'list') setViewMode(restored.viewMode);
+      if (typeof restored.filtersOpen === 'boolean') setFiltersOpen(restored.filtersOpen);
+      if (typeof restored.searchOpen === 'boolean') setSearchOpen(restored.searchOpen);
+      if (restored.statusFilter) setSearchParams({ status: String(restored.statusFilter) });
+    },
+    [setSearchParams]
+  );
 
-    if (statusFilter === 'living') {
-      result = result.filter((m) => !isDeceased(m));
-    } else if (statusFilter === 'deceased') {
-      result = result.filter((m) => isDeceased(m));
+  useRestorePageState(applyRestoredPageState);
+
+  useSavePageStateOnUnmount('/family-members', {
+    surnameFilter,
+    placeFilter,
+    genderFilter,
+    searchQuery,
+    viewMode,
+    filtersOpen,
+    searchOpen,
+    statusFilter: statusFilter || '',
+  });
+
+  const filteredMembers = useMemo(
+    () =>
+      filterMembers(members, {
+        surname: surnameFilter,
+        place: placeFilter,
+        gender: genderFilter,
+        status: statusFilter || '',
+        searchQuery,
+      }),
+    [members, searchQuery, statusFilter, surnameFilter, placeFilter, genderFilter]
+  );
+
+  const surnameOptions = useMemo(() => getUniqueSurnames(members), [members]);
+  const placeOptions = useMemo(() => getUniquePlaces(members), [members]);
+
+  const activeFilters = hasActiveMemberFilters({
+    surname: surnameFilter,
+    place: placeFilter,
+    gender: genderFilter,
+    status: statusFilter || '',
+    searchQuery,
+  });
+
+  const clearAllFilters = () => {
+    setSurnameFilter('');
+    setPlaceFilter('');
+    setGenderFilter('');
+    setSearchQuery('');
+    setSearchParams({});
+  };
+
+  const setStatusFilter = (value) => {
+    if (!value) {
+      setSearchParams({});
+      return;
     }
+    setSearchParams({ status: value });
+  };
 
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return result;
-    return result.filter((m) => {
-      const parts = [m.name, m.surname];
-      if (!HIDE_RELATION_NAMES_IN_UI && m.relation) parts.push(m.relation);
-      const hay = parts.filter(Boolean).join(' ').toLowerCase();
-      return hay.includes(q);
-    });
-  }, [members, searchQuery, statusFilter]);
+  const filterSelectClass =
+    'mobile-input rounded-lg border border-gray-300 bg-white px-2.5 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white';
 
   const handleDelete = async (id, member) => {
     const name = displayName(member);
@@ -184,7 +245,14 @@ export default function FamilyMembers() {
     );
   }
 
-  const showNoSearchResults = members.length > 0 && filteredMembers.length === 0 && searchQuery.trim() !== '';
+  const showNoResults = members.length > 0 && filteredMembers.length === 0 && activeFilters;
+
+  const pageLabel =
+    statusFilter === 'living'
+      ? 'Living Members'
+      : statusFilter === 'deceased'
+        ? 'Deceased Members'
+        : 'Family Members';
 
   return (
     <div className="space-y-6">
@@ -205,69 +273,191 @@ export default function FamilyMembers() {
         </div>
       )}
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            {statusFilter === 'living'
-              ? 'Living Members'
-              : statusFilter === 'deceased'
-                ? 'Deceased Members'
-                : 'Family Members'}
-          </h1>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setSearchOpen((o) => !o)}
-              aria-expanded={searchOpen}
-              aria-controls={searchPanelId}
-              aria-label={searchOpen ? 'Hide search' : 'Show search'}
-              className={cn(
-                'inline-flex h-10 w-10 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700',
-                searchOpen && 'ring-2 ring-primary-500 ring-offset-2 dark:ring-offset-gray-950'
-              )}
-            >
-              <Search className="h-5 w-5" />
-            </button>
-            <div className="flex items-center rounded-lg border border-gray-300 p-0.5 dark:border-gray-600">
+        <ModulePageHeader
+          label={pageLabel}
+          stackActionsOnMobile
+          actions={
+            <>
               <button
                 type="button"
-                onClick={() => setViewMode('grid')}
-                aria-pressed={viewMode === 'grid'}
-                aria-label="Grid view"
-                title="Grid view"
+                onClick={() => setFiltersOpen((o) => !o)}
+                aria-expanded={filtersOpen}
+                aria-label={filtersOpen ? 'Hide filters' : 'Show filters'}
                 className={cn(
-                  'inline-flex h-9 w-9 items-center justify-center rounded-md transition-colors',
-                  viewMode === 'grid'
-                    ? 'bg-primary-600 text-white'
-                    : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'
+                  'inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700',
+                  filtersOpen && 'ring-2 ring-primary-500 ring-offset-2 dark:ring-offset-gray-950',
+                  activeFilters && 'border-primary-300 dark:border-primary-700'
                 )}
               >
-                <LayoutGrid className="h-4 w-4" />
+                <Filter className="h-4 w-4" />
+                <span>Filters</span>
               </button>
               <button
                 type="button"
-                onClick={() => setViewMode('list')}
-                aria-pressed={viewMode === 'list'}
-                aria-label="List view"
-                title="List view"
+                onClick={() => setSearchOpen((o) => !o)}
+                aria-expanded={searchOpen}
+                aria-controls={searchPanelId}
+                aria-label={searchOpen ? 'Hide search' : 'Show search'}
                 className={cn(
-                  'inline-flex h-9 w-9 items-center justify-center rounded-md transition-colors',
-                  viewMode === 'list'
-                    ? 'bg-primary-600 text-white'
-                    : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'
+                  'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700',
+                  searchOpen && 'ring-2 ring-primary-500 ring-offset-2 dark:ring-offset-gray-950'
                 )}
               >
-                <List className="h-4 w-4" />
+                <Search className="h-5 w-5" />
               </button>
+              <div className="flex shrink-0 items-center rounded-lg border border-gray-300 p-0.5 dark:border-gray-600">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('grid')}
+                  aria-pressed={viewMode === 'grid'}
+                  aria-label="Grid view"
+                  title="Grid view"
+                  className={cn(
+                    'inline-flex h-9 w-9 items-center justify-center rounded-md transition-colors',
+                    viewMode === 'grid'
+                      ? 'bg-primary-600 text-white'
+                      : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'
+                  )}
+                >
+                  <LayoutGrid className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('list')}
+                  aria-pressed={viewMode === 'list'}
+                  aria-label="List view"
+                  title="List view"
+                  className={cn(
+                    'inline-flex h-9 w-9 items-center justify-center rounded-md transition-colors',
+                    viewMode === 'list'
+                      ? 'bg-primary-600 text-white'
+                      : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'
+                  )}
+                >
+                  <List className="h-4 w-4" />
+                </button>
+              </div>
+              <Link
+                to="/family-members/add"
+                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 font-medium text-white transition-colors hover:bg-primary-700"
+              >
+                <UserPlus className="h-5 w-5" />
+                Add Member
+              </Link>
+            </>
+          }
+        />
+        {filtersOpen && (
+          <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <label htmlFor={`${uid}-filter-surname`} className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">
+                  Surname
+                </label>
+                <select
+                  id={`${uid}-filter-surname`}
+                  value={surnameFilter}
+                  onChange={(e) => setSurnameFilter(e.target.value)}
+                  className={cn(filterSelectClass, 'w-full')}
+                >
+                  <option value="">All surnames</option>
+                  {surnameOptions.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor={`${uid}-filter-place`} className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">
+                  Village / Place
+                </label>
+                <select
+                  id={`${uid}-filter-place`}
+                  value={placeFilter}
+                  onChange={(e) => setPlaceFilter(e.target.value)}
+                  className={cn(filterSelectClass, 'w-full')}
+                >
+                  <option value="">All places</option>
+                  {placeOptions.map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">Matches current or birth place</p>
+              </div>
+              <div>
+                <label htmlFor={`${uid}-filter-gender`} className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">
+                  Gender
+                </label>
+                <select
+                  id={`${uid}-filter-gender`}
+                  value={genderFilter}
+                  onChange={(e) => setGenderFilter(e.target.value)}
+                  className={cn(filterSelectClass, 'w-full')}
+                >
+                  <option value="">All genders</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor={`${uid}-filter-status`} className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">
+                  Status
+                </label>
+                <select
+                  id={`${uid}-filter-status`}
+                  value={statusFilter || ''}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className={cn(filterSelectClass, 'w-full')}
+                >
+                  <option value="">All members</option>
+                  <option value="living">Living</option>
+                  <option value="deceased">Deceased</option>
+                </select>
+              </div>
             </div>
-            <Link
-              to="/family-members/add"
-              className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 font-medium text-white transition-colors hover:bg-primary-700"
-            >
-              <UserPlus className="h-5 w-5" />
-              Add Member
-            </Link>
+            {activeFilters && (
+              <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3 dark:border-gray-800">
+                {surnameFilter && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                    Surname: {surnameFilter}
+                  </span>
+                )}
+                {placeFilter && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                    Place: {placeFilter}
+                  </span>
+                )}
+                {genderFilter && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                    Gender: {genderFilter}
+                  </span>
+                )}
+                {statusFilter && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-700 dark:bg-primary-950/40 dark:text-primary-300">
+                    {statusFilter === 'living' ? 'Living' : 'Deceased'}
+                  </span>
+                )}
+                {searchQuery.trim() && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                    Search: {searchQuery.trim()}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={clearAllFilters}
+                  className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  Clear all
+                </button>
+              </div>
+            )}
           </div>
-        </div>
+        )}
         {searchOpen && (
           <div id={searchPanelId} className="w-full sm:max-w-md sm:ml-auto">
             <label htmlFor={searchInputId} className="sr-only">
@@ -278,29 +468,13 @@ export default function FamilyMembers() {
               type="search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={HIDE_RELATION_NAMES_IN_UI ? 'Search by name…' : 'Search by name or relation…'}
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white dark:placeholder:text-gray-500"
+              placeholder={HIDE_RELATION_NAMES_IN_UI ? 'Search by name, phone, or place…' : 'Search by name, relation, phone, or place…'}
+              className="mobile-input w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white dark:placeholder:text-gray-500"
               autoFocus
             />
           </div>
         )}
       </div>
-
-      {statusFilter && (
-        <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-sm font-medium text-primary-700 dark:border-primary-800 dark:bg-primary-950/40 dark:text-primary-300">
-            {statusFilter === 'living' ? 'Living members' : 'Deceased members'}
-          </span>
-          <button
-            type="button"
-            onClick={() => setSearchParams({})}
-            className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
-          >
-            <X className="h-3.5 w-3.5" />
-            Clear filter
-          </button>
-        </div>
-      )}
 
       {viewMode === 'grid' ? (
         <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
@@ -344,9 +518,9 @@ export default function FamilyMembers() {
         </ul>
       )}
 
-      {showNoSearchResults && (
+      {showNoResults && (
         <p className="rounded-xl border border-dashed border-gray-300 py-12 text-center text-gray-500 dark:border-gray-700 dark:text-gray-400">
-          No members match your search.
+          No members match your filters.
         </p>
       )}
 

@@ -93,12 +93,13 @@ export function livingCounts(members) {
 }
 
 /**
- * Members with DOB in the next `withinDays` days (calendar in Asia/Kolkata), excluding deceased.
+ * Members with a recurring month-day date in the next `withinDays` days (IST), excluding deceased.
  * @param {Array<Record<string, unknown>>} members
+ * @param {string} dateField
  * @param {number} withinDays
  * @returns {{ member: Record<string, unknown>; nextYmd: string }[]}
  */
-export function upcomingBirthdays(members, withinDays = 60) {
+function upcomingByMonthDay(members, dateField, withinDays = 60) {
   const todayYmd = todayYmdInTimeZone('Asia/Kolkata');
   const endYmd = addCalendarDays(todayYmd, withinDays);
   if (!todayYmd || !endYmd) return [];
@@ -107,7 +108,7 @@ export function upcomingBirthdays(members, withinDays = 60) {
   const out = [];
   for (const m of members) {
     if (isDeceased(m)) continue;
-    const p = parseCalendarYmd(m.date_of_birth);
+    const p = parseCalendarYmd(m[dateField]);
     if (!p) continue;
     const md = p.ymd.slice(5);
     let nextYmd = `${ty}-${md}`;
@@ -118,6 +119,83 @@ export function upcomingBirthdays(members, withinDays = 60) {
   }
   out.sort((a, b) => a.nextYmd.localeCompare(b.nextYmd));
   return out;
+}
+
+/**
+ * Members with DOB in the next `withinDays` days (calendar in Asia/Kolkata), excluding deceased.
+ * @param {Array<Record<string, unknown>>} members
+ * @param {number} withinDays
+ * @returns {{ member: Record<string, unknown>; nextYmd: string }[]}
+ */
+export function upcomingBirthdays(members, withinDays = 60) {
+  return upcomingByMonthDay(members, 'date_of_birth', withinDays);
+}
+
+/**
+ * @param {Array<Record<string, unknown>>} members
+ * @param {number} withinDays
+ * @returns {{ member: Record<string, unknown>; nextYmd: string }[]}
+ */
+export function upcomingAnniversaries(members, withinDays = 60) {
+  return upcomingByMonthDay(members, 'anniversary_date', withinDays);
+}
+
+function memberListDisplayName(m) {
+  if (!m) return '';
+  return [m.name, m.surname].filter(Boolean).join(' ') || m.name || 'Member';
+}
+
+/** Husband & wife when genders are set; otherwise alphabetical. */
+function coupleAnniversaryTitle(member, spouse) {
+  const leftName = memberListDisplayName(member);
+  if (!spouse) return leftName;
+  const rightName = memberListDisplayName(spouse);
+  const g1 = String(member.gender || '').trim();
+  const g2 = String(spouse.gender || '').trim();
+  if (g1 === 'Male' && g2 === 'Female') return `${leftName} & ${rightName}`;
+  if (g1 === 'Female' && g2 === 'Male') return `${rightName} & ${leftName}`;
+  return [leftName, rightName].sort((a, b) => a.localeCompare(b)).join(' & ');
+}
+
+/**
+ * @param {Array<Record<string, unknown>>} members
+ * @param {number} withinDays
+ * @returns {{ key: string; type: 'birthday' | 'anniversary'; member: Record<string, unknown>; nextYmd: string; title: string }[]}
+ */
+export function upcomingFamilyDates(members, withinDays = 60) {
+  const byId = new Map((members || []).map((m) => [Number(m.id), m]));
+  const birthdays = upcomingBirthdays(members, withinDays).map(({ member, nextYmd }) => ({
+    key: `b-${member.id}-${nextYmd}`,
+    type: 'birthday',
+    member,
+    nextYmd,
+    title: memberListDisplayName(member),
+  }));
+
+  const seenCouples = new Set();
+  const anniversaries = [];
+  for (const { member, nextYmd } of upcomingAnniversaries(members, withinDays)) {
+    const spouseId = member.spouse_id;
+    const spouse =
+      spouseId != null && String(spouseId).trim() !== '' ? byId.get(Number(spouseId)) || null : null;
+    const pairIds = [Number(member.id)];
+    if (spouse?.id != null) pairIds.push(Number(spouse.id));
+    pairIds.sort((a, b) => a - b);
+    const key = `a-${pairIds.join('-')}-${nextYmd}`;
+    if (seenCouples.has(key)) continue;
+    seenCouples.add(key);
+    anniversaries.push({
+      key,
+      type: 'anniversary',
+      member,
+      nextYmd,
+      title: coupleAnniversaryTitle(member, spouse),
+    });
+  }
+
+  return [...birthdays, ...anniversaries].sort(
+    (a, b) => a.nextYmd.localeCompare(b.nextYmd) || a.title.localeCompare(b.title)
+  );
 }
 
 /**

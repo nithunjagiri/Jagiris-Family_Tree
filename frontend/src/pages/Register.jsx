@@ -67,7 +67,7 @@ export default function Register() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4 py-12 dark:bg-gray-950">
+    <div className="standalone-page flex flex-col items-center bg-gray-50 px-4 py-12 pb-safe dark:bg-gray-950">
       <div className="w-full max-w-lg">
         <AuthBranding />
         <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-soft dark:border-gray-800 dark:bg-gray-900 dark:shadow-soft-dark">
@@ -193,6 +193,13 @@ export default function Register() {
               />
             </div>
             {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+            <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+              By registering, you agree to our{' '}
+              <Link to="/privacy-policy" className="font-medium text-primary-600 hover:underline dark:text-primary-400">
+                Privacy Policy
+              </Link>
+              .
+            </p>
             <button
               type="submit"
               disabled={loading}

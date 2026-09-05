@@ -1,5 +1,5 @@
 const express = require('express');
-const { auth } = require('../middleware/auth');
+const { auth, requireAdmin } = require('../middleware/auth');
 const { uploadSingle } = require('../middleware/upload');
 const accountController = require('../controllers/accountController');
 const { resolveFamilyContext } = require('../lib/familyAccess');
@@ -12,7 +12,7 @@ router.get('/privacy', accountController.getPrivacySettings);
 router.patch('/profile', uploadSingle.single('profile_photo'), accountController.validateProfilePatch, accountController.patchProfile);
 router.patch('/privacy', accountController.validatePrivacyPatch, accountController.patchPrivacySettings);
 router.post('/change-password', accountController.validateChangePassword, accountController.changePassword);
-router.get('/export', accountController.exportData);
+router.get('/export', requireAdmin, accountController.exportData);
 router.get('/families', accountController.listFamilies);
 router.post('/delete-account', accountController.validateDeleteAccount, accountController.deleteAccount);
 

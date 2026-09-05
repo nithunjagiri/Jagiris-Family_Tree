@@ -112,7 +112,7 @@ export default function SearchableSelect({ value, onChange, options, placeholder
         onClick={handleTriggerClick}
         onKeyDown={handleKeyDown}
         className={cn(
-          'flex w-full items-center justify-between gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-left text-sm transition-colors',
+          'flex w-full touch-manipulation items-center justify-between gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-left text-base sm:py-2 sm:text-sm',
           'focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20',
           'dark:border-gray-600 dark:bg-gray-800 dark:text-white',
           open && 'border-primary-500 ring-2 ring-primary-500/20'
@@ -141,7 +141,7 @@ export default function SearchableSelect({ value, onChange, options, placeholder
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute left-0 right-0 z-50 mt-1 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
+        <div className="absolute left-0 right-0 z-50 mt-1 max-h-[min(50vh,16rem)] overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800 sm:max-h-none">
           {/* Search input */}
           <div className="flex items-center gap-2 border-b border-gray-100 px-3 py-2 dark:border-gray-700">
             <Search className="h-4 w-4 shrink-0 text-gray-400" />

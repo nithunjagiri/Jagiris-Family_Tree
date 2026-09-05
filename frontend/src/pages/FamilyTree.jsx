@@ -5,6 +5,8 @@ import { User, UserPlus, ZoomIn, ZoomOut, Maximize2, Expand, Shrink } from 'luci
 import { familyTreeApi } from '../services/api';
 import { formatCalendarLong } from '../lib/calendarDate';
 import { resolveBackendPublicUrl } from '../lib/backendOrigin';
+import ModulePageHeader from '../components/ModulePageHeader';
+import { isCompactViewport } from '../lib/mobile';
 
 const NODE_WIDTH = 140;
 /** SVG foreignObject box — tight; overflow visible so extra text is not clipped. */
@@ -14,8 +16,11 @@ const NODE_SIZE_X = NODE_WIDTH * 2 + SPOUSE_GAP + 60;
 /** Vertical spacing between tree levels (keep a bit below node height for edge lines). */
 const NODE_SIZE_Y = FOREIGN_OBJECT_HEIGHT + 44;
 
-const SCALE_EXTENT = { min: 0.05, max: 2.5 };
+const SCALE_EXTENT = { min: 0.15, max: 2.5 };
 const ZOOM_FACTOR = 1.35;
+/** Minimum zoom so nodes stay readable when the tree is very wide. */
+const MIN_READABLE_ZOOM = 0.38;
+const MIN_READABLE_ZOOM_MOBILE = 0.48;
 
 const cardButtonClass =
   'flex min-h-0 flex-col items-center rounded-xl border border-gray-200/90 bg-white px-2 py-1.5 shadow-sm transition-all duration-200 hover:border-primary-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 dark:border-gray-600 dark:bg-gray-800/95 dark:hover:border-primary-500 dark:focus-visible:ring-offset-gray-950 cursor-pointer overflow-visible';
@@ -39,18 +44,26 @@ function getTreeWidth(node) {
   return maxWidth;
 }
 
-function estimateInitialZoom(containerWidth, containerHeight, treeData) {
-  if (!treeData || containerWidth <= 0 || containerHeight <= 0) return 0.85;
+function estimateInitialZoom(containerWidth, containerHeight, treeData, { mobile = false } = {}) {
+  if (!treeData || containerWidth <= 0 || containerHeight <= 0) {
+    return mobile ? MIN_READABLE_ZOOM_MOBILE : MIN_READABLE_ZOOM;
+  }
   const depth = getTreeDepth(treeData);
   const width = getTreeWidth(treeData);
   const estimatedW = width * NODE_SIZE_X * 1.25;
   const estimatedH = depth * NODE_SIZE_Y * 1.35;
-  const zoom = Math.min(
-    containerWidth / estimatedW,
-    containerHeight / estimatedH,
-    SCALE_EXTENT.max
-  );
-  return Math.max(Math.min(zoom, SCALE_EXTENT.max), SCALE_EXTENT.min);
+  const zoomW = containerWidth / estimatedW;
+  const zoomH = containerHeight / estimatedH;
+  const minZoom = mobile ? MIN_READABLE_ZOOM_MOBILE : MIN_READABLE_ZOOM;
+
+  // Wide trees: fit by height and allow horizontal pan instead of shrinking to invisible size.
+  if (mobile || zoomW < minZoom) {
+    const zoom = Math.min(zoomH * 1.06, SCALE_EXTENT.max);
+    return Math.max(zoom, minZoom);
+  }
+
+  const zoom = Math.min(zoomW, zoomH, SCALE_EXTENT.max);
+  return Math.max(zoom, minZoom);
 }
 
 /** Vertical translate so the fitted tree sits nearer the middle of the viewport (root is at translate). */
@@ -186,6 +199,9 @@ function CustomNode({ nodeDatum, onNodeClick, onSpouseClick }) {
   );
 }
 
+const viewToolBtnClass =
+  'inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-xs font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800';
+
 export default function FamilyTree() {
   const navigate = useNavigate();
   const [treeData, setTreeData] = useState(null);
@@ -218,7 +234,8 @@ export default function FamilyTree() {
       const h = el.offsetHeight;
       setDimensions((prev) => (prev.width === w && prev.height === h ? prev : { width: w, height: h }));
       if (w > 0 && h > 0) {
-        const z = estimateInitialZoom(w, h, treeData);
+        const mobile = isCompactViewport();
+        const z = estimateInitialZoom(w, h, treeData, { mobile });
         const tr = computeFitTranslate(w, h, treeData, z);
         const next = { zoom: z, translate: tr };
         viewRef.current = next;
@@ -226,9 +243,15 @@ export default function FamilyTree() {
       }
     };
     sync();
-    const ro = new ResizeObserver(sync);
+    const raf = requestAnimationFrame(sync);
+    const ro = new ResizeObserver(() => sync());
     ro.observe(el);
-    return () => ro.disconnect();
+    window.addEventListener('resize', sync);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+      window.removeEventListener('resize', sync);
+    };
   }, [treeData, applyView]);
 
   const handleTreeUpdate = useCallback(({ zoom, translate }) => {
@@ -249,7 +272,8 @@ export default function FamilyTree() {
 
   const handleFitView = () => {
     if (!treeData || dimensions.width <= 0 || dimensions.height <= 0) return;
-    const z = estimateInitialZoom(dimensions.width, dimensions.height, treeData);
+    const mobile = isCompactViewport();
+    const z = estimateInitialZoom(dimensions.width, dimensions.height, treeData, { mobile });
     const tr = computeFitTranslate(dimensions.width, dimensions.height, treeData, z);
     applyView({ zoom: z, translate: tr });
   };
@@ -285,89 +309,76 @@ export default function FamilyTree() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-5rem)] w-full max-w-none flex-col">
-      <div className="flex flex-shrink-0 flex-col gap-3 border-b border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900 sm:flex-row sm:items-center sm:justify-between md:px-6">
-        <div className="min-w-0 flex-1 space-y-1">
-          <h1 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-white">Family Tree</h1>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Click a card to open profile · Drag to pan · Scroll to zoom · Use toolbar to fit or zoom
-          </p>
-        </div>
-        <Link
-          to="/family-members/add"
-          className="inline-flex shrink-0 items-center gap-2 self-start rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary-700 sm:self-auto"
-        >
-          <UserPlus className="h-5 w-5" aria-hidden />
-          Add New Member
-        </Link>
+    <div className="flex min-h-0 flex-1 flex-col w-full max-w-none">
+      <div className="shrink-0 border-b border-gray-200 bg-white px-3 py-3 dark:border-gray-800 dark:bg-gray-900 md:px-4">
+        <ModulePageHeader
+          label="Family Tree"
+          description="Click a card to open profile · Drag to pan · Scroll to zoom · Use toolbar to fit or zoom"
+          descriptionClassName="hidden sm:block"
+          actions={
+            <Link
+              to="/family-members/add"
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary-700"
+            >
+              <UserPlus className="h-5 w-5" aria-hidden />
+              Add Member
+            </Link>
+          }
+        />
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col px-4 pb-4 pt-3 md:px-6 md:pb-6">
+      <div className="flex min-h-0 flex-1 flex-col px-2 pb-3 pt-2 md:px-4 md:pb-4">
         {!treeData ? (
-          <div className="family-tree-viewport flex min-h-[480px] flex-1 flex-col items-center justify-center gap-4 px-4 text-center text-sm text-gray-500 dark:text-gray-400">
+          <div className="family-tree-viewport flex flex-1 flex-col items-center justify-center gap-4 px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
             <p>No family tree data. Add members and set Father / Mother in Edit to build the tree.</p>
             <Link
               to="/family-members/add"
               className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary-700"
             >
               <UserPlus className="h-5 w-5" aria-hidden />
-              Add New Member
+              Add Member
             </Link>
           </div>
         ) : (
           <>
-            <div className="mb-2 flex flex-shrink-0 flex-wrap items-center gap-2">
-              <span className="mr-1 text-[11px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                View
-              </span>
-              <button
-                type="button"
-                onClick={handleFitView}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
-                title="Fit tree to view"
-              >
-                <Maximize2 className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
-                Fit
-              </button>
-              <button
-                type="button"
-                onClick={handleZoomIn}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
-                title="Zoom in"
-              >
-                <ZoomIn className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
-                Zoom in
-              </button>
-              <button
-                type="button"
-                onClick={handleZoomOut}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
-                title="Zoom out"
-              >
-                <ZoomOut className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
-                Zoom out
-              </button>
-              <button
-                type="button"
-                onClick={() => void toggleTreeFullscreen()}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
-                title={isFullscreen ? 'Exit full screen' : 'Full screen tree'}
-              >
-                {isFullscreen ? (
-                  <Shrink className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
-                ) : (
-                  <Expand className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
-                )}
-                {isFullscreen ? 'Exit full screen' : 'Full screen'}
-              </button>
+            <div className="mb-2 shrink-0 rounded-xl border border-gray-200/80 bg-white p-2 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+              <p className="mb-2 px-1 text-[11px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                View controls
+              </p>
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+                <button type="button" onClick={handleFitView} className={viewToolBtnClass} title="Fit tree to view">
+                  <Maximize2 className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                  Fit
+                </button>
+                <button type="button" onClick={handleZoomIn} className={viewToolBtnClass} title="Zoom in">
+                  <ZoomIn className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                  Zoom in
+                </button>
+                <button type="button" onClick={handleZoomOut} className={viewToolBtnClass} title="Zoom out">
+                  <ZoomOut className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                  Zoom out
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void toggleTreeFullscreen()}
+                  className={viewToolBtnClass}
+                  title={isFullscreen ? 'Exit full screen' : 'Full screen tree'}
+                >
+                  {isFullscreen ? (
+                    <Shrink className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                  ) : (
+                    <Expand className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                  )}
+                  {isFullscreen ? 'Exit' : 'Full screen'}
+                </button>
+              </div>
             </div>
 
             <div
               ref={containerRef}
-              className="family-tree-viewport flex min-h-[480px] flex-1 flex-col"
-              style={{ width: '100%' }}
+              className="family-tree-viewport min-h-0 flex-1"
             >
-              {dimensions.width > 0 ? (
+              {dimensions.width > 0 && dimensions.height > 0 ? (
                 <Tree
                   data={treeData}
                   orientation="vertical"
@@ -396,7 +407,7 @@ export default function FamilyTree() {
                   hasInteractiveNodes
                 />
               ) : (
-                <div className="flex h-full min-h-[480px] items-center justify-center">
+                <div className="flex h-full min-h-[280px] items-center justify-center">
                   <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
                 </div>
               )}

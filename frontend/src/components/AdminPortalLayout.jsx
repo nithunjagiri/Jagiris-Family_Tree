@@ -1,4 +1,5 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import Breadcrumb from './Breadcrumb';
 import { cn } from '../lib/utils';
 
 const tabClass = ({ isActive }) =>
@@ -10,17 +11,31 @@ const tabClass = ({ isActive }) =>
   );
 
 export default function AdminPortalLayout() {
+  const { pathname } = useLocation();
+  const pageLabel = pathname.includes('/admin/announcements')
+    ? 'Announcements'
+    : pathname.includes('/admin/audit')
+      ? 'Audit log'
+      : 'Admin portal';
+  const pageDescription =
+    pageLabel === 'Announcements'
+      ? 'Create and manage announcements for the family.'
+      : pageLabel === 'Audit log'
+        ? 'Review activity across the family app.'
+        : 'Manage user accounts and review the audit trail.';
+
   return (
     <div className="w-full max-w-none space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Admin portal</h1>
-        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-          Manage user accounts and review the audit trail.
-        </p>
+        <Breadcrumb items={[{ label: 'Home', to: '/' }, { label: pageLabel }]} />
+        <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{pageDescription}</p>
       </div>
       <nav className="flex gap-1 border-b border-gray-200 dark:border-gray-700" aria-label="Admin sections">
         <NavLink to="users" className={tabClass}>
           Users
+        </NavLink>
+        <NavLink to="announcements" className={tabClass}>
+          Announcements
         </NavLink>
         <NavLink to="audit" className={tabClass}>
           Audit log

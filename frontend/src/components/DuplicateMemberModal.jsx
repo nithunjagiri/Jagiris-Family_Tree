@@ -129,8 +129,6 @@ export default function DuplicateMemberModal({
                   </dl>
                   <Link
                     to={`/family-members/${m.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
                     className="mt-3 inline-block text-sm font-medium text-primary-600 hover:underline dark:text-primary-400"
                   >
                     View profile

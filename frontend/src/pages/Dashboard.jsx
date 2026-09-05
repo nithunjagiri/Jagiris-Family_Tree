@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import {
   Users,
   Image,
@@ -12,6 +12,8 @@ import {
   Droplets,
   Phone,
   MessageCircle,
+  Megaphone,
+  ChevronDown,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -26,7 +28,7 @@ import {
   Cell,
   Legend,
 } from 'recharts';
-import { familyMembersApi, photosApi, eventsApi } from '../services/api';
+import { familyMembersApi, photosApi, eventsApi, notificationsApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../lib/utils';
 import { HIDE_RELATION_NAMES_IN_UI } from '../lib/appDisplaySettings';
@@ -42,7 +44,11 @@ import {
   bloodGroupBreakdown,
   yearFromDate,
 } from '../lib/dashboardAnalytics';
+import { scrollMainToElement } from '../lib/scrollMain';
 import { eventCalendarParts, parseCalendarYmd } from '../lib/calendarDate';
+import { birthdayWishTextForTiming, eventShareTextForTiming, senderDisplayName, absoluteOccasionTiming } from '../lib/wishMessages';
+import WishActions from '../components/WishActions';
+import ShareOccasionButton from '../components/ShareOccasionButton';
 
 const GENDER_COLORS = {
   male: '#2563eb',
@@ -149,10 +155,12 @@ function StatTile({ label, value, hint, to, onClick, icon: Icon, accent }) {
 }
 
 export default function Dashboard() {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
+  const location = useLocation();
   const [members, setMembers] = useState([]);
   const [recentPhotos, setRecentPhotos] = useState([]);
   const [upcomingEvents, setUpcomingEvents] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
   const chart = useChartTheme();
   const [selectedBloodGroup, setSelectedBloodGroup] = useState('');
@@ -161,15 +169,17 @@ export default function Dashboard() {
     let cancelled = false;
     async function load() {
       try {
-        const [membersRes, photosRes, eventsRes] = await Promise.all([
+        const [membersRes, photosRes, eventsRes, announcementsRes] = await Promise.all([
           familyMembersApi.list(),
           photosApi.list(),
           eventsApi.list(true),
+          notificationsApi.listAnnouncements({ limit: 8, offset: 0 }).catch(() => ({ data: { items: [] } })),
         ]);
         if (!cancelled) {
           setMembers(membersRes.data || []);
           setRecentPhotos((photosRes.data || []).slice(0, 6));
           setUpcomingEvents((eventsRes.data || []).slice(0, 6));
+          setAnnouncements(announcementsRes.data?.items || []);
         }
       } catch (_) {
         if (!cancelled) {
@@ -184,6 +194,17 @@ export default function Dashboard() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (loading) return;
+    const scrollTarget =
+      location.state?.scrollTo ||
+      (location.hash === '#dashboard-announcements' ? 'dashboard-announcements' : null);
+    if (!scrollTarget) return;
+    requestAnimationFrame(() => {
+      scrollMainToElement(scrollTarget);
+    });
+  }, [loading, location.state?.scrollTo, location.hash]);
 
   const membersCount = members.length;
   const { living, deceased } = useMemo(() => livingCounts(members), [members]);
@@ -216,6 +237,7 @@ export default function Dashboard() {
         subtitle: 'Birthday',
         description: null,
         to: `/family-members/${member.id}`,
+        member,
       };
     });
 
@@ -230,7 +252,8 @@ export default function Dashboard() {
           title: e.title || 'Event',
           subtitle: 'Event',
           description: e.description || null,
-          to: '/events',
+          to: `/events/${e.id}`,
+          event: e,
         };
       })
       .filter(Boolean);
@@ -301,7 +324,7 @@ export default function Dashboard() {
           label="Birthdays (60 days)"
           value={birthdaysSoon.length}
           hint="Upcoming celebrations"
-          onClick={() => document.getElementById('upcoming-events')?.scrollIntoView({ behavior: 'smooth' })}
+          onClick={() => scrollMainToElement('upcoming-events')}
           icon={Cake}
           accent="bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
         />
@@ -309,7 +332,7 @@ export default function Dashboard() {
           label="Members with blood group"
           value={bloodGroupStats.totalWithBloodGroup}
           hint={`${Math.max(0, membersCount - bloodGroupStats.totalWithBloodGroup)} pending blood group`}
-          onClick={() => document.getElementById('blood-groups-section')?.scrollIntoView({ behavior: 'smooth' })}
+          onClick={() => scrollMainToElement('blood-groups-section')}
           icon={Droplets}
           accent="bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400"
         />
@@ -616,7 +639,7 @@ export default function Dashboard() {
               <h2 className="text-base font-semibold text-gray-900 dark:text-white">Upcoming events & birthdays</h2>
             </div>
             <Link
-              to="/events"
+              to="/events?tab=birthdays"
               className="text-sm font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400"
             >
               View all
@@ -630,37 +653,110 @@ export default function Dashboard() {
             ) : (
               upcomingTimeline.map((item) => {
                 const evParts = eventCalendarParts(item.dateYmd);
+                const occasionTiming = absoluteOccasionTiming(item.dateYmd);
                 return (
                 <li key={item.key} className="flex gap-4 px-5 py-4">
-                  <div className="flex w-10 shrink-0 flex-col items-center border-r border-gray-100 pr-4 dark:border-gray-800">
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-primary-600 dark:text-primary-400">
-                      {evParts?.monthShort ?? '—'}
-                    </span>
-                    <span className="text-xl font-bold tabular-nums text-gray-900 dark:text-white">
-                      {evParts?.day ?? '—'}
-                    </span>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-gray-900 dark:text-white">{item.title}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {item.subtitle} {evParts ? `· ${evParts.weekdayLong}, ${evParts.year}` : ''}
-                    </p>
-                    {item.description && (
-                      <p className="mt-1 line-clamp-2 text-sm text-gray-600 dark:text-gray-300">{item.description}</p>
-                    )}
-                  </div>
                   <Link
                     to={item.to}
-                    className="shrink-0 self-center rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                    state={
+                      item.type === 'event'
+                        ? { returnTo: '/', event: item.event }
+                        : undefined
+                    }
+                    className="flex min-w-0 flex-1 gap-4"
                   >
-                    View
+                    <div className="flex w-10 shrink-0 flex-col items-center border-r border-gray-100 pr-4 dark:border-gray-800">
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-primary-600 dark:text-primary-400">
+                        {evParts?.monthShort ?? '—'}
+                      </span>
+                      <span className="text-xl font-bold tabular-nums text-gray-900 dark:text-white">
+                        {evParts?.day ?? '—'}
+                      </span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-gray-900 dark:text-white">{item.title}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {item.subtitle} {evParts ? `· ${evParts.weekdayLong}, ${evParts.year}` : ''}
+                      </p>
+                      {item.description && (
+                        <p className="mt-1 line-clamp-2 text-sm text-gray-600 dark:text-gray-300">{item.description}</p>
+                      )}
+                    </div>
                   </Link>
+                  <div className="flex shrink-0 flex-col items-end justify-center gap-1.5 self-center">
+                    {item.type === 'birthday' && item.member && occasionTiming ? (
+                      <WishActions
+                        compact
+                        member={item.member}
+                        message={birthdayWishTextForTiming(
+                          item.title,
+                          senderDisplayName(user),
+                          occasionTiming
+                        )}
+                      />
+                    ) : null}
+                    {item.type === 'event' && item.event && occasionTiming ? (
+                      <ShareOccasionButton
+                        compact
+                        title={item.title}
+                        text={eventShareTextForTiming(
+                          item.event,
+                          senderDisplayName(user),
+                          occasionTiming
+                        )}
+                      />
+                    ) : null}
+                    <Link
+                      to={item.to}
+                      state={
+                        item.type === 'event'
+                          ? { returnTo: '/', event: item.event }
+                          : undefined
+                      }
+                      className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                    >
+                      View
+                    </Link>
+                  </div>
                 </li>
                 );
               })
             )}
           </ul>
         </div>
+      </section>
+
+      {/* Announcements — full width below photos & events */}
+      <section
+        id="dashboard-announcements"
+        className="rounded-2xl border border-gray-200/80 bg-white shadow-soft dark:border-gray-800 dark:bg-gray-900 dark:shadow-soft-dark"
+      >
+        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4 dark:border-gray-800">
+          <div className="flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-50 text-primary-600 dark:bg-primary-950/50 dark:text-primary-400">
+              <Megaphone className="h-4 w-4" />
+            </span>
+            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Announcements</h2>
+          </div>
+          {isAdmin && (
+            <Link
+              to="/admin/announcements"
+              className="text-sm font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400"
+            >
+              Post announcement
+            </Link>
+          )}
+        </div>
+        <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+          {announcements.length === 0 ? (
+            <li className="px-5 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
+              No announcements yet.
+              {isAdmin ? ' Use “Post announcement” to share news with your family.' : ''}
+            </li>
+          ) : (
+            announcements.map((a) => <AnnouncementItem key={a.id} announcement={a} />)
+          )}
+        </ul>
       </section>
 
       {selectedBloodGroup && (
@@ -671,6 +767,65 @@ export default function Dashboard() {
         />
       )}
     </div>
+  );
+}
+
+function AnnouncementItem({ announcement: a }) {
+  const [expanded, setExpanded] = useState(false);
+  const body = a.body?.trim() || '';
+  const isLong = body.length > 140 || body.includes('\n');
+
+  return (
+    <li className="px-5 py-4">
+      <div
+        role={isLong ? 'button' : undefined}
+        tabIndex={isLong ? 0 : undefined}
+        onClick={isLong ? () => setExpanded((v) => !v) : undefined}
+        onKeyDown={
+          isLong
+            ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setExpanded((v) => !v);
+                }
+              }
+            : undefined
+        }
+        className={cn(isLong && 'touch-manipulation cursor-pointer rounded-lg -mx-2 px-2 py-2 active:bg-gray-100 dark:active:bg-gray-800/60 sm:py-1 sm:hover:bg-gray-50 dark:sm:hover:bg-gray-800/50')}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <p className="font-medium text-gray-900 dark:text-white">{a.title}</p>
+          {isLong && (
+            <ChevronDown
+              className={cn(
+                'mt-0.5 h-4 w-4 shrink-0 text-gray-400 transition-transform',
+                expanded && 'rotate-180'
+              )}
+              aria-hidden
+            />
+          )}
+        </div>
+        {body && (
+          <p
+            className={cn(
+              'mt-1 text-sm text-gray-600 dark:text-gray-300',
+              expanded ? 'whitespace-pre-wrap' : isLong && 'line-clamp-3'
+            )}
+          >
+            {body}
+          </p>
+        )}
+        {isLong && (
+          <p className="mt-1.5 text-xs font-medium text-primary-600 dark:text-primary-400">
+            {expanded ? 'Show less' : 'Tap to read full message'}
+          </p>
+        )}
+        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+          {a.created_by_username && `by ${a.created_by_username} · `}
+          {a.created_at ? new Date(a.created_at).toLocaleString() : ''}
+        </p>
+      </div>
+    </li>
   );
 }
 

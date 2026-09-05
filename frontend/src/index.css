@@ -3,8 +3,126 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    @apply h-full scroll-smooth;
+    overflow: hidden;
+  }
+
   body {
-    @apply bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100 antialiased;
+    @apply h-full bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100 antialiased;
+    overflow: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  html.native-app body {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  #root {
+    @apply h-full overflow-hidden;
+  }
+
+  html.native-app #root {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+}
+
+@layer utilities {
+  .pb-safe {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+  }
+
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  /* 16px+ inputs avoid iOS zoom-on-focus */
+  .mobile-input {
+    @apply max-sm:min-h-[44px] max-sm:text-base;
+  }
+
+  .touch-manipulation {
+    touch-action: manipulation;
+  }
+
+  /* Viewport-bounded scrollport for auth/legal pages. html/body/#root are overflow:hidden. */
+  .standalone-page {
+    box-sizing: border-box;
+    height: 100%;
+    max-height: 100dvh;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+  }
+
+  html.native-app .standalone-page {
+    max-height: 100%;
+  }
+
+  .scroll-touch {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    overscroll-behavior: contain;
+  }
+}
+
+@layer components {
+  :root {
+    --app-toolbar-height: 3.5rem;
+    --app-safe-top: env(safe-area-inset-top, 0px);
+    --app-topbar-total: calc(var(--app-safe-top) + var(--app-toolbar-height));
+  }
+
+  html.native-app {
+    --app-safe-top: max(env(safe-area-inset-top, 0px), var(--native-status-bar-fallback, 0px));
+    overscroll-behavior: none;
+  }
+
+  html.native-app main {
+    overscroll-behavior-y: contain;
+  }
+
+  .app-topbar {
+    @apply relative z-40 shrink-0 border-b border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900;
+    padding-top: var(--app-safe-top);
+  }
+
+  /* Pinned below the status bar; shell padding keeps module content from sliding underneath. */
+  html.native-app .app-topbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 50;
+  }
+
+  html.native-app .app-shell-body {
+    min-height: 0;
+    flex: 1;
+    padding-top: var(--app-topbar-total);
+  }
+
+  html.native-app .app-layout-root {
+    height: 100%;
+    max-height: 100dvh;
+    overflow: hidden;
+  }
+
+  .app-topbar-row {
+    @apply flex min-h-[var(--app-toolbar-height)] items-center gap-2 px-3 md:gap-4 md:px-6;
   }
 }
 
@@ -38,13 +156,18 @@ html .rd3t-tree-container svg {
 
 @layer components {
   .family-tree-viewport {
-    @apply relative overflow-hidden rounded-xl border border-gray-200/90 bg-slate-50 shadow-sm dark:border-gray-800 dark:bg-gray-950;
+    @apply relative h-full min-h-[280px] w-full overflow-hidden rounded-xl border border-gray-200/90 bg-slate-50 shadow-sm dark:border-gray-800 dark:bg-gray-950;
     background-image: radial-gradient(
       circle at 1px 1px,
       rgb(148 163 184 / 0.22) 1px,
       transparent 0
     );
     background-size: 22px 22px;
+  }
+
+  .family-tree-viewport .rd3t-tree-container,
+  .family-tree-viewport .rd3t-tree-container svg {
+    @apply h-full w-full;
   }
 
   html.dark .family-tree-viewport {
@@ -58,5 +181,25 @@ html .rd3t-tree-container svg {
   .leaflet-map-wrap {
     isolation: isolate;
     z-index: 0;
+  }
+
+  .leaflet-popup-content-wrapper {
+    @apply rounded-xl shadow-lg;
+  }
+
+  .leaflet-popup-content {
+    @apply m-3 text-sm leading-snug text-gray-900;
+  }
+
+  html.dark .leaflet-popup-content-wrapper {
+    @apply bg-gray-900 text-gray-100;
+  }
+
+  html.dark .leaflet-popup-content {
+    @apply text-gray-100;
+  }
+
+  html.dark .leaflet-popup-tip {
+    @apply bg-gray-900;
   }
 }

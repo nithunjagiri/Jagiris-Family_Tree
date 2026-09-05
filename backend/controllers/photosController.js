@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const db = require('../database/db');
 const { logAudit } = require('../lib/auditLog');
 const path = require('path');
@@ -7,10 +8,22 @@ const { useCloudinary } = require('../middleware/upload');
 
 exports.list = async (req, res, next) => {
   try {
-    const result = await db.query(
-      'SELECT id, family_id, title, image_path, uploaded_at FROM photos WHERE family_id = $1 ORDER BY uploaded_at DESC',
-      [req.familyId]
-    );
+    let result;
+    try {
+      result = await db.query(
+        'SELECT id, family_id, title, image_path, uploaded_at, upload_batch_id FROM photos WHERE family_id = $1 ORDER BY uploaded_at DESC',
+        [req.familyId]
+      );
+    } catch (e) {
+      if (e.code !== '42703') throw e;
+      result = await db.query(
+        'SELECT id, family_id, title, image_path, uploaded_at FROM photos WHERE family_id = $1 ORDER BY uploaded_at DESC',
+        [req.familyId]
+      );
+      result.rows.forEach((row) => {
+        row.upload_batch_id = null;
+      });
+    }
     res.json(result.rows);
   } catch (err) {
     next(err);
@@ -24,6 +37,7 @@ exports.upload = async (req, res, next) => {
     if (files.length > 5) return res.status(400).json({ error: 'Maximum 5 images per upload' });
 
     const title = req.body.title || files[0].originalname || 'Untitled';
+    const uploadBatchId = crypto.randomUUID();
     const inserted = [];
 
     for (const file of files) {
@@ -32,8 +46,10 @@ exports.upload = async (req, res, next) => {
         : `/uploads/gallery/${file.filename}`;
 
       const result = await db.query(
-        'INSERT INTO photos (family_id, title, image_path, uploaded_at) VALUES ($1, $2, $3, NOW()) RETURNING id, family_id, title, image_path, uploaded_at',
-        [req.familyId, title, image_path]
+        `INSERT INTO photos (family_id, title, image_path, uploaded_at, upload_batch_id)
+         VALUES ($1, $2, $3, NOW(), $4)
+         RETURNING id, family_id, title, image_path, uploaded_at, upload_batch_id`,
+        [req.familyId, title, image_path, uploadBatchId]
       );
       inserted.push(result.rows[0]);
     }

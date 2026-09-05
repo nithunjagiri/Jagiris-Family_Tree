@@ -5,7 +5,10 @@ import App from './App';
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { initMobileShell } from './lib/mobile';
 import './index.css';
+
+initMobileShell();
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

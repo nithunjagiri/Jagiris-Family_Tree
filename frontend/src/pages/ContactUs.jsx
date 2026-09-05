@@ -15,7 +15,7 @@ const contactRole = import.meta.env.VITE_CONTACT_ADMIN_ROLE || DEFAULTS.role;
 const contactEmail = (import.meta.env.VITE_CONTACT_EMAIL || DEFAULTS.email).trim();
 const contactMobile = (import.meta.env.VITE_CONTACT_PHONE || DEFAULTS.mobile).replace(/\D/g, '');
 const contactWhatsapp = (import.meta.env.VITE_CONTACT_WHATSAPP || DEFAULTS.whatsapp).replace(/\D/g, '');
-const contactHours = import.meta.env.VITE_CONTACT_HOURS || 'Monday–Friday, 9:00 a.m.–5:00 p.m. (local time)';
+const contactHours = import.meta.env.VITE_CONTACT_HOURS || 'Daily, 9:00 AM - 11:00 PM IST';
 const contactLocation = import.meta.env.VITE_CONTACT_LOCATION || '';
 
 function mailHref() {
@@ -62,10 +62,9 @@ export default function ContactUs() {
           Back to dashboard
         </Link>
         <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Contact us</h1>
-        <p className="mt-2 max-w-3xl text-base leading-relaxed text-gray-600 dark:text-gray-400">
-          This archive is maintained for the Jagiris family. For access issues, corrections to records, or general
-          questions, please use one of the channels below. Include your registered username and a concise summary of
-          your request so we can respond promptly—typically within one business day.
+        <p className="mt-3 max-w-2xl text-[15px] leading-7 text-gray-600 dark:text-gray-400 sm:text-base sm:leading-8">
+          For account access, record corrections, or questions about Jagiri&apos;s Kutumbam, contact the administrator
+          below. Please include your username and a short note so we can respond quickly and accurately.
         </p>
       </div>
 
@@ -75,10 +74,9 @@ export default function ContactUs() {
             <MessageSquare className="h-5 w-5 shrink-0 text-primary-600" aria-hidden />
             Family administrator
           </h2>
-          <p className="mt-3 text-sm leading-relaxed text-gray-600 dark:text-gray-400">
-            A single point of contact handles account access and stewardship of shared family data. Messages are
-            handled in confidence; please do not send passwords or government ID images by email unless specifically
-            requested.
+          <p className="mt-4 max-w-2xl text-[15px] leading-7 text-gray-600 dark:text-gray-400">
+            Nithun manages account support and shared family records for this app. Messages are handled with care;
+            please do not share passwords, OTPs, or sensitive documents unless specifically requested.
           </p>
 
           <ul className="mt-8 divide-y divide-gray-100 dark:divide-gray-800">
@@ -185,6 +183,11 @@ export default function ContactUs() {
           </section>
         </aside>
       </div>
+      <p className="mt-8 text-center text-sm text-gray-500 dark:text-gray-400">
+        <Link to="/privacy-policy" className="font-medium text-primary-600 hover:underline dark:text-primary-400">
+          Privacy Policy
+        </Link>
+      </p>
     </div>
   );
 }

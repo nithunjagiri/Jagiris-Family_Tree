@@ -4,11 +4,19 @@ import { ArrowLeft, Upload, X, ImagePlus } from 'lucide-react';
 import { photosApi } from '../services/api';
 import { cn } from '../lib/utils';
 import { getApiErrorMessage } from '../lib/apiErrorMessage';
+import {
+  compressImageFile,
+  formatFileSize,
+  IMAGE_ACCEPTED_TYPES,
+  ONE_MB,
+} from '../lib/imageProcessing';
+import ImageCropModal from '../components/ImageCropModal';
 
 const MAX_FILES = 5;
 const MAX_SIZE_BYTES = 5 * 1024 * 1024;
 const MAX_SIZE_LABEL = '5 MB';
-const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+const TARGET_SIZE_BYTES = 2 * ONE_MB;
+const TARGET_SIZE_LABEL = '2 MB';
 
 const inputClass =
   'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-gray-600 dark:bg-gray-800 dark:text-white';
@@ -21,18 +29,15 @@ export default function UploadPhotoForm() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [processingIndex, setProcessingIndex] = useState(null);
+  const [cropIndex, setCropIndex] = useState(null);
   const fileInputRef = useRef(null);
 
   const addFiles = useCallback((incoming) => {
     const arr = Array.from(incoming);
-    const invalidType = arr.filter((f) => !ACCEPTED_TYPES.includes(f.type));
+    const invalidType = arr.filter((f) => !IMAGE_ACCEPTED_TYPES.includes(f.type));
     if (invalidType.length > 0) {
       setError(`Invalid format: ${invalidType.map((f) => f.name).join(', ')}. Only JPEG, PNG, GIF, and WebP are allowed.`);
-      return;
-    }
-    const oversized = arr.filter((f) => f.size > MAX_SIZE_BYTES);
-    if (oversized.length > 0) {
-      setError(`Too large: ${oversized.map((f) => f.name).join(', ')}. Each image must be under ${MAX_SIZE_LABEL}.`);
       return;
     }
 
@@ -58,16 +63,72 @@ export default function UploadPhotoForm() {
     });
   }, []);
 
-  const removeFile = (index) => {
-    setFiles((prev) => {
-      const next = prev.filter((_, i) => i !== index);
-      const urls = next.map((f) => URL.createObjectURL(f));
-      setPreviews((old) => {
-        old.forEach((u) => URL.revokeObjectURL(u));
-        return urls;
-      });
-      return next;
+  const updateFiles = useCallback((nextFiles) => {
+    setFiles(nextFiles);
+    setPreviews((old) => {
+      old.forEach((u) => URL.revokeObjectURL(u));
+      return nextFiles.map((f) => URL.createObjectURL(f));
     });
+  }, []);
+
+  const removeFile = (index) => {
+    updateFiles(files.filter((_, i) => i !== index));
+  };
+
+  const processFile = async (index, cropSquare = false) => {
+    const file = files[index];
+    if (!file) return;
+    setError('');
+    setProcessingIndex(index);
+    try {
+      const processed = await compressImageFile(file, {
+        targetBytes: TARGET_SIZE_BYTES,
+        cropSquare,
+        maxWidth: cropSquare ? 1400 : 1800,
+        maxHeight: cropSquare ? 1400 : 1800,
+      });
+      const next = files.map((f, i) => (i === index ? processed : f));
+      updateFiles(next);
+      if (processed.size > MAX_SIZE_BYTES) {
+        setError(`${processed.name} is still larger than ${MAX_SIZE_LABEL}. Try crop + compress.`);
+      }
+    } catch (err) {
+      setError(err.message || 'Could not process image.');
+    } finally {
+      setProcessingIndex(null);
+    }
+  };
+
+  const applyCroppedFile = (cropped) => {
+    if (cropIndex == null) return;
+    updateFiles(files.map((f, i) => (i === cropIndex ? cropped : f)));
+    setCropIndex(null);
+  };
+
+  const processAllLarge = async () => {
+    let working = [...files];
+    setError('');
+    try {
+      for (let i = 0; i < working.length; i += 1) {
+        if (working[i].size > MAX_SIZE_BYTES) {
+          setProcessingIndex(i);
+          // Process sequentially to avoid high memory pressure on mobile browsers.
+          // eslint-disable-next-line no-await-in-loop
+          const processed = await compressImageFile(working[i], {
+            targetBytes: TARGET_SIZE_BYTES,
+            cropSquare: false,
+            maxWidth: 1800,
+            maxHeight: 1800,
+          });
+          working = working.map((f, idx) => (idx === i ? processed : f));
+          updateFiles(working);
+        }
+      }
+    } catch (err) {
+      setError(err.message || 'Could not process image.');
+    } finally {
+      setProcessingIndex(null);
+    }
   };
 
   const handleDrop = (e) => {
@@ -92,6 +153,11 @@ export default function UploadPhotoForm() {
       setError('Please select at least one image');
       return;
     }
+    const oversized = files.filter((f) => f.size > MAX_SIZE_BYTES);
+    if (oversized.length > 0) {
+      setError(`Please compress or remove oversized images first: ${oversized.map((f) => f.name).join(', ')}`);
+      return;
+    }
     setError('');
     setLoading(true);
     try {
@@ -103,6 +169,9 @@ export default function UploadPhotoForm() {
       setLoading(false);
     }
   };
+
+  const oversizedCount = files.filter((f) => f.size > MAX_SIZE_BYTES).length;
+  const canSubmit = files.length > 0 && oversizedCount === 0 && processingIndex === null && !loading;
 
   return (
     <div className="space-y-6">
@@ -174,12 +243,39 @@ export default function UploadPhotoForm() {
                 JPEG, PNG, GIF, WebP — up to {MAX_FILES} images, {MAX_SIZE_LABEL} each
               </p>
             </div>
+            {oversizedCount > 0 && (
+              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/35 dark:text-amber-100">
+                <p className="font-medium">
+                  {oversizedCount} image{oversizedCount > 1 ? 's are' : ' is'} over {MAX_SIZE_LABEL}.
+                </p>
+                <p className="mt-1 text-xs">
+                  Use Compress to {TARGET_SIZE_LABEL} or Crop square + compress before uploading.
+                </p>
+                <button
+                  type="button"
+                  onClick={processAllLarge}
+                  disabled={processingIndex !== null}
+                  className="mt-2 rounded-md bg-amber-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-800 disabled:opacity-50"
+                >
+                  {processingIndex !== null ? 'Processing...' : `Compress all large images to ${TARGET_SIZE_LABEL}`}
+                </button>
+              </div>
+            )}
           </div>
 
           {previews.length > 0 && (
             <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">
-              {previews.map((url, i) => (
-                <div key={i} className="group relative aspect-square overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+              {previews.map((url, i) => {
+                const file = files[i];
+                const tooLarge = file?.size > MAX_SIZE_BYTES;
+                return (
+                <div
+                  key={i}
+                  className={cn(
+                    'group relative aspect-square overflow-hidden rounded-lg border dark:border-gray-700',
+                    tooLarge ? 'border-amber-400 ring-2 ring-amber-400/30' : 'border-gray-200'
+                  )}
+                >
                   <img src={url} alt="" className="h-full w-full object-cover" />
                   <button
                     type="button"
@@ -189,10 +285,32 @@ export default function UploadPhotoForm() {
                     <X className="h-3.5 w-3.5" />
                   </button>
                   <div className="absolute inset-x-0 bottom-0 bg-black/50 px-1.5 py-0.5 text-center text-[10px] text-white">
-                    {i + 1} / {files.length}
+                    {formatFileSize(file?.size || 0)}
                   </div>
+                  {tooLarge && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/70 p-2 text-center">
+                      <p className="text-[10px] font-semibold text-amber-100">Over {MAX_SIZE_LABEL}</p>
+                      <button
+                        type="button"
+                        onClick={() => processFile(i, false)}
+                        disabled={processingIndex !== null}
+                        className="rounded bg-primary-600 px-2 py-1 text-[10px] font-medium text-white disabled:opacity-50"
+                      >
+                        {processingIndex === i ? 'Working...' : `Compress to ${TARGET_SIZE_LABEL}`}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCropIndex(i)}
+                        disabled={processingIndex !== null}
+                        className="rounded bg-white/15 px-2 py-1 text-[10px] font-medium text-white disabled:opacity-50"
+                      >
+                        Crop image
+                      </button>
+                    </div>
+                  )}
                 </div>
-              ))}
+              );
+              })}
             </div>
           )}
 
@@ -204,16 +322,26 @@ export default function UploadPhotoForm() {
 
           <button
             type="submit"
-            disabled={loading || files.length === 0}
+            disabled={!canSubmit}
             className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary-600 py-2.5 font-medium text-white transition-colors hover:bg-primary-700 disabled:opacity-50"
           >
             <Upload className="h-4 w-4" />
-            {loading
+            {processingIndex !== null
+              ? 'Processing image...'
+              : loading
               ? 'Uploading...'
               : `Upload ${files.length} photo${files.length !== 1 ? 's' : ''}`}
           </button>
         </form>
       </div>
+      <ImageCropModal
+        open={cropIndex != null}
+        file={cropIndex == null ? null : files[cropIndex]}
+        title="Crop gallery image"
+        targetBytes={TARGET_SIZE_BYTES}
+        onClose={() => setCropIndex(null)}
+        onApply={applyCroppedFile}
+      />
     </div>
   );
 }

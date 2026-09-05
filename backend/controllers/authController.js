@@ -162,27 +162,24 @@ exports.login = async (req, res, next) => {
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
     const { username, password } = req.body;
+    const loginSelects = [
+      'id, username, email, password, COALESCE(is_admin, false) AS is_admin, first_name, last_name, profile_photo',
+      'id, username, email, password, COALESCE(is_admin, false) AS is_admin, first_name, last_name',
+      'id, username, email, password, COALESCE(is_admin, false) AS is_admin',
+      'id, username, email, password',
+    ];
     let result;
-    try {
-      result = await db.query(
-        'SELECT id, username, email, password, COALESCE(is_admin, false) AS is_admin, first_name, last_name FROM users WHERE username = $1',
-        [username]
-      );
-    } catch (err) {
-      if (err.code === '42703') {
-        try {
-          result = await db.query(
-            'SELECT id, username, email, password, COALESCE(is_admin, false) AS is_admin FROM users WHERE username = $1',
-            [username]
-          );
-        } catch (err2) {
-          if (err2.code === '42703') {
-            result = await db.query('SELECT id, username, email, password FROM users WHERE username = $1', [username]);
-            if (result.rows[0]) result.rows[0].is_admin = false;
-          } else throw err2;
-        }
-      } else throw err;
+    let lastSelectErr;
+    for (const cols of loginSelects) {
+      try {
+        result = await db.query(`SELECT ${cols} FROM users WHERE username = $1`, [username]);
+        break;
+      } catch (err) {
+        lastSelectErr = err;
+        if (err.code !== '42703') throw err;
+      }
     }
+    if (!result) throw lastSelectErr;
     const user = result.rows[0];
     if (!user || !(await bcrypt.compare(String(password), user.password)))
       return res.status(401).json({ error: 'Invalid username or password' });
@@ -199,7 +196,18 @@ exports.login = async (req, res, next) => {
     await ensureUserHasDefaultFamily(user.id, user.username);
     const isAdmin = user.is_admin === true || user.username === 'nithun';
     const token = jwt.sign({ id: user.id, username: user.username, isAdmin }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
-    res.json({ token, user: { id: user.id, username: user.username, email: user.email, isAdmin, first_name: user.first_name || null, last_name: user.last_name || null } });
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        isAdmin,
+        first_name: user.first_name || null,
+        last_name: user.last_name || null,
+        profile_photo: user.profile_photo ?? null,
+      },
+    });
   } catch (err) {
     next(err);
   }
