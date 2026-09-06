@@ -1,0 +1,38 @@
+Jagiri's Kutumbam — 3-Minute App Walkthrough (English)
+=====================================================
+
+TELEPROMPTER SCRIPT
+-------------------
+
+Welcome to Jagiri's Kutumbam — our family app. This is one place where our family can stay connected: see relatives, share photos, plan events, find places on the map, and message each other. Open the app, enter your username and password, and tap Login. If you forget your password, use Forgot password on this same screen.
+
+After login, you land on the Dashboard. Here you get a quick family overview — member counts, upcoming birthdays, recent activity, and announcements. Use the menu on the side — or the menu icon on phone — to open every module. Think of the Dashboard as your home base.
+
+Tap Family Members. You'll see the full family list. You can search and filter to find someone quickly. Open any person to view their profile — photo, details, and related information. If you have permission, you can also add a new member or edit an existing one from here. Always enter names and dates carefully so the family record stays accurate.
+
+Next, open Family Tree. This shows how people are connected — parents, children, and relatives — in a visual tree, so it's easier to understand relationships than reading a long list.
+
+Open Photo Gallery. Browse family albums and photos. Tap a picture to view it larger. To share a memory, use Upload, choose a photo, add a short note if you like, and save. Everyone with access can enjoy it later.
+
+Open Events. Here you'll find family gatherings, celebrations, and important dates. Tap an event to see the details. If you're organizing something, create an event so the family knows the date, time, and what to expect.
+
+Open Places and map. This shows where family members are connected on a map. Use it to understand locations at a glance — helpful when planning visits or events.
+
+Need someone fast? Open Search, type a name, and jump straight to their page. For private conversations, open Messages. Pick a chat, type your message, and send. You can also share images in chat when you want to send a photo quickly.
+
+Finally, open Account and privacy to manage your own settings and privacy preferences. If you need help from the family admins, use Contact us from the menu.
+
+That's Jagiri's Kutumbam in three minutes: Dashboard to start, Members and Tree to know the family, Gallery and Events to share life, Places and Search to find people, and Messages to stay in touch. Thank you — open the app anytime, and keep our family connected.
+
+CUE SHEET
+---------
+0:00  Login
+0:20  Dashboard
+0:45  Family Members → profile
+1:10  Family Tree
+1:25  Photo Gallery
+1:40  Events
+1:55  Places & map
+2:10  Search → Messages
+2:30  Account & privacy
+2:40  Closing
