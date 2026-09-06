@@ -496,6 +496,83 @@ async function ensurePlacesAuditSchema() {
          WHERE fm.user_id = u.id
        )`
   );
+
+  // Backfill admin bell items for users already waiting (one notification per pending user)
+  try {
+    const shared = await db.query(
+      `SELECT family_id
+       FROM family_members
+       WHERE family_id IS NOT NULL
+       GROUP BY family_id
+       HAVING COUNT(*) > 0
+       ORDER BY COUNT(*) DESC, family_id ASC
+       LIMIT 1`
+    );
+    const sharedFamilyId = shared.rows[0]?.family_id;
+    if (sharedFamilyId != null) {
+      let pending;
+      try {
+        pending = await db.query(
+          `SELECT id, username, first_name, last_name
+           FROM users
+           WHERE COALESCE(family_access, 'approved') = 'pending'
+             AND COALESCE(is_admin, false) = false`
+        );
+      } catch (e1) {
+        if (e1.code !== '42703') throw e1;
+        pending = await db.query(
+          `SELECT id, username
+           FROM users
+           WHERE COALESCE(family_access, 'approved') = 'pending'
+             AND COALESCE(is_admin, false) = false`
+        );
+      }
+      const admins = await db.query(
+        `SELECT id FROM users
+         WHERE COALESCE(is_admin, false) = true
+           AND COALESCE(is_active, true) = true`
+      ).catch(async (e2) => {
+        if (e2.code !== '42703') throw e2;
+        return db.query(`SELECT id FROM users WHERE COALESCE(is_admin, false) = true`);
+      });
+
+      for (const p of pending.rows) {
+        const who =
+          [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || p.username || `User #${p.id}`;
+        const referenceKey = `access_pending-${p.id}`;
+        for (const a of admins.rows) {
+          if (Number(a.id) === Number(p.id)) continue;
+          const exists = await db.query(
+            `SELECT 1 FROM user_notifications
+             WHERE user_id = $1::integer AND type = 'access_pending' AND reference_key = $2
+             LIMIT 1`,
+            [Number(a.id), referenceKey]
+          );
+          if (exists.rows.length > 0) continue;
+          await db.query(
+            `INSERT INTO user_notifications (
+               user_id, family_id, type, title, body,
+               entity_type, entity_id, link_path, actor_user_id, reference_key
+             ) VALUES ($1, $2, 'access_pending', $3, $4, 'user', $5, $6, $5, $7)`,
+            [
+              Number(a.id),
+              Number(sharedFamilyId),
+              'New user awaiting approval',
+              `${who} registered and is waiting for family access approval.`,
+              Number(p.id),
+              '/admin/users?family_access=pending',
+              referenceKey,
+            ]
+          );
+        }
+      }
+    }
+  } catch (e) {
+    // Partial schema — skip backfill; register path still notifies going forward
+    if (e.code !== '42P01' && e.code !== '42703') {
+      console.warn('[schema] pending-access notification backfill:', e.message);
+    }
+  }
 }
 
 module.exports = { ensurePlacesAuditSchema };
