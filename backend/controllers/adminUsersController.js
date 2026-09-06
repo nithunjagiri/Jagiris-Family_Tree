@@ -2,7 +2,7 @@ const bcrypt = require('bcryptjs');
 const { body, validationResult } = require('express-validator');
 const db = require('../database/db');
 const { logAudit } = require('../lib/auditLog');
-const { ensureUserHasDefaultFamily } = require('../lib/familyAccess');
+const { ensureUserHasDefaultFamily, setUserFamilyAccess, joinUserToSharedFamily } = require('../lib/familyAccess');
 
 const GENDER_VALUES = ['female', 'male', 'non_binary', 'other', 'prefer_not_to_say'];
 
@@ -29,8 +29,9 @@ async function countActiveAdmins() {
 
 /**
  * @param {'full'|'split'|'profile'|'minimal'} locationMode — how location columns participate in SELECT + search.
+ * @param {''|'pending'|'approved'} [familyAccessFilter]
  */
-function buildAdminUserListFilters(q, role, status, locationMode) {
+function buildAdminUserListFilters(q, role, status, locationMode, familyAccessFilter) {
   const params = [];
   const where = ['1=1'];
   let i = 1;
@@ -63,11 +64,40 @@ function buildAdminUserListFilters(q, role, status, locationMode) {
   } else if (status === 'inactive') {
     where.push('COALESCE(is_active, true) = false');
   }
+  if (familyAccessFilter === 'pending' || familyAccessFilter === 'approved') {
+    where.push(`COALESCE(family_access, 'approved') = $${i}`);
+    params.push(familyAccessFilter);
+    i++;
+  }
   return { whereSql: where.join(' AND '), params };
 }
 
-async function queryAdminUserListPage(limit, offset, q, role, status, locationMode) {
-  const { whereSql, params } = buildAdminUserListFilters(q, role, status, locationMode);
+async function enrichUsersFamilyAccess(rows) {
+  if (!rows?.length) return;
+  try {
+    const ids = rows.map((r) => r.id);
+    const r = await db.query(
+      `SELECT id, COALESCE(family_access, 'approved') AS family_access
+       FROM users WHERE id = ANY($1::int[])`,
+      [ids]
+    );
+    const map = new Map(r.rows.map((row) => [row.id, row.family_access === 'pending' ? 'pending' : 'approved']));
+    rows.forEach((row) => {
+      row.family_access = map.get(row.id) || 'approved';
+    });
+  } catch (e) {
+    if (e.code === '42703') {
+      rows.forEach((row) => {
+        row.family_access = 'approved';
+      });
+      return;
+    }
+    throw e;
+  }
+}
+
+async function queryAdminUserListPage(limit, offset, q, role, status, locationMode, familyAccessFilter) {
+  const { whereSql, params } = buildAdminUserListFilters(q, role, status, locationMode, familyAccessFilter);
   const limIdx = params.length + 1;
   const offIdx = params.length + 2;
   const listParams = [...params, limit, offset];
@@ -232,6 +262,13 @@ exports.createUser = async (req, res, next) => {
 
     const user = result.rows[0];
     await ensureUserHasDefaultFamily(user.id, user.username);
+    try {
+      await setUserFamilyAccess(user.id, 'approved');
+    } catch (e) {
+      if (e.code !== '42703') throw e;
+    }
+    await joinUserToSharedFamily(user.id, 'member');
+    user.family_access = 'approved';
     await logAudit({
       userId: req.user.id,
       username: req.user.username,
@@ -254,28 +291,48 @@ exports.listUsers = async (req, res, next) => {
     const q = String(req.query.q || '').trim();
     const role = String(req.query.role || '').trim();
     const status = String(req.query.status || '').trim();
+    const accessRaw = String(req.query.family_access || req.query.access || '').trim().toLowerCase();
+    const familyAccessFilter = accessRaw === 'pending' || accessRaw === 'approved' ? accessRaw : '';
+
+    async function runList(accessFilter) {
+      try {
+        return await queryAdminUserListPage(limit, offset, q, role, status, 'full', accessFilter);
+      } catch (e) {
+        if (e.code === '42703') {
+          try {
+            return await queryAdminUserListPage(limit, offset, q, role, status, 'split', accessFilter);
+          } catch (e2) {
+            if (e2.code === '42703') {
+              try {
+                return await queryAdminUserListPage(limit, offset, q, role, status, 'profile', accessFilter);
+              } catch (e3) {
+                if (e3.code === '42703') {
+                  return await queryAdminUserListPage(limit, offset, q, role, status, 'minimal', accessFilter);
+                }
+                throw e3;
+              }
+            }
+            throw e2;
+          }
+        }
+        throw e;
+      }
+    }
 
     let items;
     let countRow;
     try {
-      ({ items, countRow } = await queryAdminUserListPage(limit, offset, q, role, status, 'full'));
+      ({ items, countRow } = await runList(familyAccessFilter));
     } catch (e) {
-      if (e.code === '42703') {
-        try {
-          ({ items, countRow } = await queryAdminUserListPage(limit, offset, q, role, status, 'split'));
-        } catch (e2) {
-          if (e2.code === '42703') {
-            try {
-              ({ items, countRow } = await queryAdminUserListPage(limit, offset, q, role, status, 'profile'));
-            } catch (e3) {
-              if (e3.code === '42703') {
-                ({ items, countRow } = await queryAdminUserListPage(limit, offset, q, role, status, 'minimal'));
-              } else throw e3;
-            }
-          } else throw e2;
-        }
-      } else throw e;
+      // family_access column missing while filtering — retry without access filter
+      if (e.code === '42703' && familyAccessFilter) {
+        ({ items, countRow } = await runList(''));
+      } else {
+        throw e;
+      }
     }
+
+    await enrichUsersFamilyAccess(items.rows);
 
     res.json({
       items: items.rows,
@@ -352,7 +409,45 @@ exports.getUser = async (req, res, next) => {
     }
 
     if (!r.rows[0]) return res.status(404).json({ error: 'User not found' });
+    await enrichUsersFamilyAccess([r.rows[0]]);
     res.json({ user: r.rows[0] });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.approveFamilyAccess = async (req, res, next) => {
+  try {
+    const id = parseUserId(req);
+    if (!id) return res.status(400).json({ error: 'Invalid user id' });
+
+    const target = await db.query(
+      'SELECT id, username, COALESCE(is_admin, false) AS is_admin FROM users WHERE id = $1',
+      [id]
+    );
+    if (!target.rows[0]) return res.status(404).json({ error: 'User not found' });
+    const t = target.rows[0];
+
+    try {
+      await setUserFamilyAccess(id, 'approved');
+    } catch (e) {
+      if (e.code === '42703') {
+        return res.status(503).json({ error: 'Family access column not available. Redeploy backend schema.' });
+      }
+      throw e;
+    }
+    await joinUserToSharedFamily(id, 'member');
+
+    await logAudit({
+      userId: req.user.id,
+      username: req.user.username,
+      action: 'admin.user_approve_family_access',
+      entityType: 'user',
+      entityId: id,
+      summary: `Approved family access for ${t.username}`,
+    });
+
+    res.json({ ok: true, user: { id, username: t.username, family_access: 'approved' } });
   } catch (err) {
     next(err);
   }
@@ -561,6 +656,7 @@ exports.patchUser = async (req, res, next) => {
         }
       } else throw e;
     }
+    if (fresh.rows[0]) await enrichUsersFamilyAccess([fresh.rows[0]]);
     res.json({ user: fresh.rows[0] });
   } catch (err) {
     next(err);

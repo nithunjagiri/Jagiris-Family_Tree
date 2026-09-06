@@ -19,5 +19,6 @@ router.post(
 );
 router.post('/users/:id/deactivate', adminUsersController.deactivateUser);
 router.post('/users/:id/activate', adminUsersController.activateUser);
+router.post('/users/:id/approve-family-access', adminUsersController.approveFamilyAccess);
 
 module.exports = router;

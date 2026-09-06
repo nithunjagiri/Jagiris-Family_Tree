@@ -1,19 +1,21 @@
 const express = require('express');
-const { auth, requireAdmin } = require('../middleware/auth');
+const { auth } = require('../middleware/auth');
 const { uploadSingle } = require('../middleware/upload');
 const familyMembersController = require('../controllers/familyMembersController');
 const { resolveFamilyContext } = require('../lib/familyAccess');
+const { requireApprovedFamilyAccess } = require('../middleware/requireApprovedFamilyAccess');
 
 const router = express.Router();
 
 router.use(auth);
 router.use(resolveFamilyContext);
 
-router.get('/meta/linkable-users', familyMembersController.listLinkableUsers);
+// Pending users may GET (empty list for dashboard KPIs); writes require approval.
+router.get('/meta/linkable-users', requireApprovedFamilyAccess, familyMembersController.listLinkableUsers);
 router.get('/', familyMembersController.list);
-router.get('/:id', familyMembersController.get);
-router.post('/', uploadSingle.single('profile_photo'), familyMembersController.validateMember, familyMembersController.create);
-router.put('/:id', uploadSingle.single('profile_photo'), familyMembersController.validateMember, familyMembersController.update);
-router.delete('/:id', familyMembersController.remove);
+router.get('/:id', requireApprovedFamilyAccess, familyMembersController.get);
+router.post('/', requireApprovedFamilyAccess, uploadSingle.single('profile_photo'), familyMembersController.validateMember, familyMembersController.create);
+router.put('/:id', requireApprovedFamilyAccess, uploadSingle.single('profile_photo'), familyMembersController.validateMember, familyMembersController.update);
+router.delete('/:id', requireApprovedFamilyAccess, familyMembersController.remove);
 
 module.exports = router;

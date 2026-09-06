@@ -261,6 +261,7 @@ export const adminApi = {
   resetUserPassword: (id, data) => api.post(`/admin/users/${id}/reset-password`, data),
   deactivateUser: (id) => api.post(`/admin/users/${id}/deactivate`),
   activateUser: (id) => api.post(`/admin/users/${id}/activate`),
+  approveFamilyAccess: (id) => api.post(`/admin/users/${id}/approve-family-access`),
 };
 
 export default api;

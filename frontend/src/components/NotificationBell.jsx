@@ -46,7 +46,7 @@ function iconForType(type) {
 
 export default function NotificationBell() {
   const navigate = useNavigate();
-  const { isAdmin } = useAuth();
+  const { isAdmin, isFamilyAccessPending } = useAuth();
   const [open, setOpen] = useState(false);
   const [testSending, setTestSending] = useState(false);
   const [actionError, setActionError] = useState(null);
@@ -65,7 +65,13 @@ export default function NotificationBell() {
       path?.endsWith('#dashboard-announcements');
     if (scrollToAnnouncements) {
       navigate('/', { state: { scrollTo: 'dashboard-announcements' } });
-    } else if (path) {
+      return;
+    }
+    if (isFamilyAccessPending) {
+      navigate('/');
+      return;
+    }
+    if (path) {
       navigate(path);
     }
   };

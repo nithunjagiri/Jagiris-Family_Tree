@@ -475,6 +475,27 @@ async function ensurePlacesAuditSchema() {
   await db.query(
     'ALTER TABLE conversation_members ADD COLUMN IF NOT EXISTS inbox_removed_at TIMESTAMPTZ'
   );
+
+  // Self-register pending vs admin-approved access to the shared family archive
+  await db.query(
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS family_access VARCHAR(16) NOT NULL DEFAULT 'approved'`
+  );
+  await db.query(
+    `UPDATE users SET family_access = 'approved' WHERE family_access IS NULL OR family_access = ''`
+  );
+  // Orphans: non-admins with no membership on any family that has tree members → pending
+  await db.query(
+    `UPDATE users u
+     SET family_access = 'pending'
+     WHERE COALESCE(u.is_admin, false) = false
+       AND COALESCE(u.family_access, 'approved') = 'approved'
+       AND NOT EXISTS (
+         SELECT 1
+         FROM family_memberships fm
+         INNER JOIN family_members mem ON mem.family_id = fm.family_id
+         WHERE fm.user_id = u.id
+       )`
+  );
 }
 
 module.exports = { ensurePlacesAuditSchema };

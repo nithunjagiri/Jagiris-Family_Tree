@@ -46,8 +46,10 @@ export default function Login() {
     <div
       className={cn(
         'standalone-page flex min-h-full flex-col items-center bg-gray-50 px-4 pb-safe dark:bg-gray-950',
+        // Native: safe-area + ~3mm clearance so "Welcome" clears the camera/notch.
+        // Use pt + pb (not py) so top padding is not overridden.
         isNativeApp()
-          ? 'justify-start pt-[var(--app-safe-top)] py-6'
+          ? 'justify-start pt-[calc(var(--app-safe-top)+0.75rem)] pb-6'
           : 'justify-center py-12'
       )}
     >

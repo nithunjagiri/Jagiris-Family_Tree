@@ -5,6 +5,8 @@ const { getDismissedFeedKeys, dismissFeedItem } = require('../lib/feedDismissals
 const { sendToUsers } = require('../lib/fcmSender');
 const { scheduleInAppNotification } = require('../lib/inAppNotifications');
 const { getFamilyRecipientUserIds } = require('../lib/notificationRecipients');
+const { resolveOccasionDisplay, isOccasionType } = require('../lib/occasionNotificationDisplay');
+const { todayYmdInTimeZone, DEFAULT_TZ } = require('../lib/calendarDate');
 const { ensureAnnouncementsSchema } = require('../database/ensureAnnouncementsSchema');
 const { ensurePlacesAuditSchema } = require('../database/ensurePlacesAuditSchema');
 const { body, validationResult } = require('express-validator');
@@ -231,18 +233,38 @@ exports.listFeed = async (req, res, next) => {
       dismissed = await getDismissedFeedKeys(userId, familyId);
     }
 
+    const todayIst = todayYmdInTimeZone(DEFAULT_TZ);
+
+    // Past occasion reminders (birthday/anniversary/event) should not stay unread.
+    await db.query(
+      `UPDATE user_notifications un
+       SET read_at = NOW()
+       WHERE un.user_id = $1::integer
+         AND un.family_id = ANY($2::integer[])
+         AND un.read_at IS NULL
+         AND un.type IN ('birthday', 'anniversary', 'event')
+         AND un.reference_key ~ '^(birthday|anniversary|event)-[0-9]+-[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+         AND (regexp_match(un.reference_key, '([0-9]{4}-[0-9]{2}-[0-9]{2})$'))[1]::date < $3::date`,
+      [userId, familyIds, todayIst]
+    );
+
     const unreadStored = await db.query(
       `SELECT COUNT(*)::int AS c FROM user_notifications un
        WHERE un.user_id = $1::integer
          AND un.family_id = ANY($2::integer[])
          AND un.read_at IS NULL
-         AND un.created_at >= NOW() - ($3::integer * INTERVAL '1 day')`,
-      [userId, familyIds, FEED_INBOX_DAYS]
+         AND un.created_at >= NOW() - ($3::integer * INTERVAL '1 day')
+         AND NOT (
+           un.type IN ('birthday', 'anniversary', 'event')
+           AND un.reference_key ~ '^(birthday|anniversary|event)-[0-9]+-[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+           AND (regexp_match(un.reference_key, '([0-9]{4}-[0-9]{2}-[0-9]{2})$'))[1]::date < $4::date
+         )`,
+      [userId, familyIds, FEED_INBOX_DAYS, todayIst]
     );
 
     const itemsResult = await db.query(
       `SELECT un.id, un.type, un.title, un.body, un.entity_type, un.entity_id, un.link_path,
-              un.actor_user_id, un.read_at, un.created_at
+              un.actor_user_id, un.reference_key, un.read_at, un.created_at
        FROM user_notifications un
        WHERE un.user_id = $1::integer
          AND un.family_id = ANY($2::integer[])
@@ -252,11 +274,24 @@ exports.listFeed = async (req, res, next) => {
       [userId, familyIds, limit, FEED_INBOX_DAYS]
     );
 
-    const stored = itemsResult.rows.map((row) => ({
-      ...row,
-      id: String(row.id),
-      is_computed: false,
-    }));
+    const stored = itemsResult.rows.map((row) => {
+      const display = isOccasionType(row.type)
+        ? resolveOccasionDisplay(row, todayIst)
+        : { title: row.title, body: row.body, isPast: false };
+      return {
+        id: String(row.id),
+        type: row.type,
+        title: display.title,
+        body: display.body,
+        entity_type: row.entity_type,
+        entity_id: row.entity_id,
+        link_path: row.link_path,
+        actor_user_id: row.actor_user_id,
+        read_at: display.isPast ? row.read_at || new Date().toISOString() : row.read_at,
+        created_at: row.created_at,
+        is_computed: false,
+      };
+    });
 
     let computed = [];
     try {
