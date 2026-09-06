@@ -1,10 +1,10 @@
 /**
- * Transactional email for password-reset OTP only.
+ * Transactional email for password-reset OTP and account/access notices.
  *
  * Resend (recommended): RESEND_API_KEY + RESEND_FROM or EMAIL_FROM.
  *   Use a verified domain to email any user. onboarding@resend.dev only delivers to your Resend signup email.
  *
- * SMTP fallback for OTP only when RESEND_API_KEY is unset (SMTP_HOST, SMTP_USER, SMTP_PASS, EMAIL_FROM).
+ * SMTP fallback when RESEND_API_KEY is unset (SMTP_HOST, SMTP_USER, SMTP_PASS, EMAIL_FROM).
  * Occasion wishes use a separate channel: backend/lib/smtpWishSend.js (WISH_EMAIL_FROM + SMTP_*).
  */
 const nodemailer = require('nodemailer');
@@ -25,6 +25,11 @@ function isOtpMailConfigured() {
   const user = process.env.SMTP_USER && String(process.env.SMTP_USER).trim();
   const pass = process.env.SMTP_PASS != null && String(process.env.SMTP_PASS).trim() !== '';
   return Boolean(host && user && pass);
+}
+
+/** Same transport as OTP — used for account/access emails without changing OTP behavior. */
+function isTransactionalMailConfigured() {
+  return isOtpMailConfigured();
 }
 
 async function sendViaResend({ to, subject, html, text }) {
@@ -83,6 +88,26 @@ async function sendViaSmtp({ to, subject, html, text }) {
 }
 
 /**
+ * Generic transactional email (Resend or SMTP). Soft-skips when not configured.
+ * @returns {Promise<{ ok?: boolean, skipped?: boolean, reason?: string }>}
+ */
+async function sendTransactionalEmail({ to, subject, html, text }) {
+  const dest = to != null ? String(to).trim() : '';
+  if (!dest || !dest.includes('@')) {
+    return { skipped: true, reason: 'invalid_recipient' };
+  }
+  if (!isTransactionalMailConfigured()) {
+    return { skipped: true, reason: 'not_configured' };
+  }
+  if (hasResendKey()) {
+    await sendViaResend({ to: dest, subject, html, text });
+    return { ok: true };
+  }
+  await sendViaSmtp({ to: dest, subject, html, text });
+  return { ok: true };
+}
+
+/**
  * @param {{ to: string, otp: string, minutesValid: number }} opts
  */
 async function sendPasswordResetOtpEmail({ to, otp, minutesValid }) {
@@ -104,6 +129,8 @@ async function sendPasswordResetOtpEmail({ to, otp, minutesValid }) {
 
 module.exports = {
   isOtpMailConfigured,
+  isTransactionalMailConfigured,
+  sendTransactionalEmail,
   sendPasswordResetOtpEmail,
   fromAddress,
 };

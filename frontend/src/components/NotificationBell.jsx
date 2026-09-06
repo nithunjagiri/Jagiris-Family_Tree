@@ -12,6 +12,7 @@ import {
   AlertCircle,
   RefreshCw,
   Sparkles,
+  CheckCircle2,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useNotificationFeed, formatNotificationTime } from '../hooks/useNotificationFeed';
@@ -25,6 +26,8 @@ function iconForType(type) {
       return UserPlus;
     case 'access_pending':
       return UserPlus;
+    case 'access_approved':
+      return CheckCircle2;
     case 'member_deceased':
       return Heart;
     case 'event_added':

@@ -3,6 +3,7 @@ const { body, validationResult } = require('express-validator');
 const db = require('../database/db');
 const { logAudit } = require('../lib/auditLog');
 const { ensureUserHasDefaultFamily, setUserFamilyAccess, joinUserToSharedFamily } = require('../lib/familyAccess');
+const { scheduleNotifyUserOfFamilyAccessApproved } = require('../lib/familyAccessNotify');
 
 const GENDER_VALUES = ['female', 'male', 'non_binary', 'other', 'prefer_not_to_say'];
 
@@ -445,6 +446,11 @@ exports.approveFamilyAccess = async (req, res, next) => {
       entityType: 'user',
       entityId: id,
       summary: `Approved family access for ${t.username}`,
+    });
+
+    scheduleNotifyUserOfFamilyAccessApproved({
+      userId: id,
+      approvedByUsername: req.user.username,
     });
 
     res.json({ ok: true, user: { id, username: t.username, family_access: 'approved' } });
