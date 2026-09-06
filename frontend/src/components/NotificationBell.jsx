@@ -23,6 +23,8 @@ function iconForType(type) {
   switch (type) {
     case 'member_added':
       return UserPlus;
+    case 'access_pending':
+      return UserPlus;
     case 'member_deceased':
       return Heart;
     case 'event_added':

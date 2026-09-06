@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Pencil, KeyRound, UserX, UserPlus, Search, RefreshCw, CheckCircle2 } from 'lucide-react';
 import { adminApi } from '../services/api';
 import { cn } from '../lib/utils';
@@ -24,6 +24,10 @@ function formatCityVillage(row) {
 }
 
 export default function AdminUsers() {
+  const [searchParams] = useSearchParams();
+  const accessFromUrl = String(searchParams.get('family_access') || '').trim().toLowerCase();
+  const initialAccess = accessFromUrl === 'pending' || accessFromUrl === 'approved' ? accessFromUrl : '';
+
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -31,7 +35,7 @@ export default function AdminUsers() {
   const [qDebounced, setQDebounced] = useState('');
   const [role, setRole] = useState('');
   const [status, setStatus] = useState('');
-  const [familyAccess, setFamilyAccess] = useState('');
+  const [familyAccess, setFamilyAccess] = useState(initialAccess);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [resetUser, setResetUser] = useState(null);
@@ -42,6 +46,13 @@ export default function AdminUsers() {
   const [disableTarget, setDisableTarget] = useState(null);
   const [disableLoading, setDisableLoading] = useState(false);
   const [approvingId, setApprovingId] = useState(null);
+
+  useEffect(() => {
+    if (accessFromUrl === 'pending' || accessFromUrl === 'approved') {
+      setFamilyAccess(accessFromUrl);
+      setOffset(0);
+    }
+  }, [accessFromUrl]);
 
   useEffect(() => {
     const t = setTimeout(() => setQDebounced(q.trim()), 350);
