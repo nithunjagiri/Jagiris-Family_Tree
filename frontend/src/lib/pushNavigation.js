@@ -43,6 +43,9 @@ export function navigateFromPushNotification(notification) {
     case 'access_pending':
       window.location.href = '/admin/users?family_access=pending';
       break;
+    case 'access_approved':
+      window.location.href = '/';
+      break;
     default:
       break;
   }
