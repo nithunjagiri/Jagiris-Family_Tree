@@ -3,8 +3,17 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const db = require('../database/db');
-const { ensureUserHasDefaultFamily, getUserFamilyAccess, setUserFamilyAccess } = require('../lib/familyAccess');
+const {
+  ensureUserHasDefaultFamily,
+  getUserFamilyAccess,
+  setUserFamilyAccess,
+} = require('../lib/familyAccess');
 const { isOtpMailConfigured, sendPasswordResetOtpEmail } = require('../lib/emailSend');
+const {
+  scheduleNotifyAdminsPendingFamilyAccess,
+  getActiveAdminUserIds,
+} = require('../lib/inAppNotifications');
+const { sendToUsers } = require('../lib/fcmSender');
 
 function sha256Token(value) {
   return crypto.createHash('sha256').update(String(value), 'utf8').digest('hex');
@@ -167,6 +176,33 @@ exports.register = async (req, res, next) => {
     const isAdmin = user.is_admin === true || user.username === 'nithun';
     const familyAccess = isAdmin ? 'approved' : 'pending';
     const token = jwt.sign({ id: user.id, username: user.username, isAdmin }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
+
+    if (familyAccess === 'pending') {
+      const displayName = [user.first_name, user.last_name].filter(Boolean).join(' ').trim() || user.username;
+      scheduleNotifyAdminsPendingFamilyAccess({
+        pendingUserId: user.id,
+        pendingUsername: user.username,
+        pendingDisplayName: displayName,
+      });
+      setImmediate(async () => {
+        try {
+          const adminIds = await getActiveAdminUserIds();
+          const recipients = adminIds.filter((id) => id !== Number(user.id));
+          if (recipients.length === 0) return;
+          const refKey = `access_pending-${user.id}`;
+          const pushTitle = 'New user awaiting approval';
+          const pushBody = `${displayName} registered and is waiting for family access approval.`;
+          await sendToUsers(recipients, 'access_pending', refKey, pushTitle, pushBody, {
+            type: 'access_pending',
+            userId: String(user.id),
+            linkPath: '/admin/users?family_access=pending',
+          });
+        } catch (err) {
+          console.error('[auth] pending-access push error:', err.message);
+        }
+      });
+    }
+
     res.status(201).json({
       token,
       user: {

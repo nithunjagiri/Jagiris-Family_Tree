@@ -40,6 +40,9 @@ export function navigateFromPushNotification(notification) {
         window.location.href = '/messages';
       }
       break;
+    case 'access_pending':
+      window.location.href = '/admin/users?family_access=pending';
+      break;
     default:
       break;
   }
