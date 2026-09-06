@@ -1,6 +1,7 @@
 const express = require('express');
 const { auth } = require('../middleware/auth');
 const { resolveFamilyContext } = require('../lib/familyAccess');
+const { requireApprovedFamilyAccess } = require('../middleware/requireApprovedFamilyAccess');
 const { uploadChat } = require('../middleware/upload');
 const messagesController = require('../controllers/messagesController');
 
@@ -8,6 +9,7 @@ const router = express.Router();
 
 router.use(auth);
 router.use(resolveFamilyContext);
+router.use(requireApprovedFamilyAccess);
 
 router.get('/threads/unread-count', messagesController.unreadCount);
 router.get('/threads', messagesController.validateListThreads, messagesController.listThreads);

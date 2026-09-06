@@ -58,7 +58,13 @@ export default function Register() {
       if (dateOfBirth) payload.date_of_birth = dateOfBirth;
 
       await authApi.register(payload);
-      navigate('/login', { replace: true, state: { message: 'Registered successfully. Please log in.' } });
+      navigate('/login', {
+        replace: true,
+        state: {
+          message:
+            'Registered successfully. You can log in now — shared family features unlock after an admin approves your account.',
+        },
+      });
     } catch (err) {
       setError(getApiErrorMessage(err, 'Registration failed'));
     } finally {

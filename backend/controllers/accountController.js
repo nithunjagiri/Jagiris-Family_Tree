@@ -13,6 +13,8 @@ const { JWT_SECRET, JWT_EXPIRY } = require('../lib/jwtConfig');
 const GENDER_VALUES = ['female', 'male', 'non_binary', 'other', 'prefer_not_to_say'];
 
 const USER_PROFILE_SELECTS = [
+  `id, username, email, first_name, last_name, phone, gender, date_of_birth, city, village, city_village, profile_photo,
+   COALESCE(family_access, 'approved') AS family_access`,
   'id, username, email, first_name, last_name, phone, gender, date_of_birth, city, village, city_village, profile_photo',
   'id, username, email, first_name, last_name, phone, gender, date_of_birth, city, village, city_village',
   'id, username, email, first_name, last_name, phone, gender, date_of_birth, city, village',
@@ -36,6 +38,7 @@ async function selectUserProfileForAccount(userId) {
       row.gender = row.gender ?? null;
       row.date_of_birth = row.date_of_birth ?? null;
       row.profile_photo = row.profile_photo ?? null;
+      row.familyAccess = row.family_access === 'pending' ? 'pending' : 'approved';
       return u;
     } catch (e) {
       lastErr = e;

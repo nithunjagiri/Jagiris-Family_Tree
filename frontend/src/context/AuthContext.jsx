@@ -7,7 +7,6 @@ import {
   teardownPushNotifications,
 } from '../lib/pushNotifications';
 import { navigateFromPushNotification } from '../lib/pushNavigation';
-import { requestNotificationFeedRefresh } from '../hooks/useNotificationFeed';
 import { disconnectChatSocket } from '../hooks/useChatSocket';
 
 const AuthContext = createContext(null);
@@ -15,6 +14,25 @@ const AuthContext = createContext(null);
 const TOKEN_KEY = 'jagiris_token';
 const USER_KEY = 'jagiris_user';
 const ACTIVE_FAMILY_KEY = 'jagiris_active_family_id';
+
+function normalizeFamilyAccess(raw) {
+  return raw === 'pending' ? 'pending' : 'approved';
+}
+
+function mergeProfileIntoUser(base, profileUser) {
+  if (!profileUser) return base;
+  const familyAccess = normalizeFamilyAccess(
+    profileUser.familyAccess ?? profileUser.family_access ?? base?.familyAccess
+  );
+  return {
+    ...base,
+    profile_photo: profileUser.profile_photo ?? base?.profile_photo ?? null,
+    first_name: profileUser.first_name ?? base?.first_name ?? null,
+    last_name: profileUser.last_name ?? base?.last_name ?? null,
+    email: profileUser.email ?? base?.email,
+    familyAccess,
+  };
+}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -73,13 +91,17 @@ export function AuthProvider({ children }) {
       setToken(t);
       try {
         const parsed = JSON.parse(u);
-        setUser(parsed);
+        const withAccess = {
+          ...parsed,
+          familyAccess: normalizeFamilyAccess(parsed.familyAccess ?? parsed.family_access),
+        };
+        setUser(withAccess);
         accountApi
           .getPrivacySettings()
           .then((res) => {
             const profileUser = res.data?.user;
             if (!profileUser) return;
-            const updated = { ...parsed, profile_photo: profileUser.profile_photo ?? null };
+            const updated = mergeProfileIntoUser(withAccess, profileUser);
             setUser(updated);
             localStorage.setItem(USER_KEY, JSON.stringify(updated));
           })
@@ -106,10 +128,14 @@ export function AuthProvider({ children }) {
   }, [token, user?.id, bootstrapActiveFamily]);
 
   const login = (newToken, newUser) => {
+    const normalized = {
+      ...newUser,
+      familyAccess: normalizeFamilyAccess(newUser?.familyAccess ?? newUser?.family_access),
+    };
     setToken(newToken);
-    setUser(newUser);
+    setUser(normalized);
     localStorage.setItem(TOKEN_KEY, newToken);
-    localStorage.setItem(USER_KEY, JSON.stringify(newUser));
+    localStorage.setItem(USER_KEY, JSON.stringify(normalized));
     bootstrapActiveFamily();
   };
 
@@ -123,8 +149,43 @@ export function AuthProvider({ children }) {
     localStorage.removeItem(ACTIVE_FAMILY_KEY);
   };
 
+  const refreshSession = useCallback(async () => {
+    const t = localStorage.getItem(TOKEN_KEY);
+    if (!t) return null;
+    try {
+      const res = await accountApi.getPrivacySettings();
+      const profileUser = res.data?.user;
+      if (!profileUser) return null;
+      setUser((prev) => {
+        const base = prev || JSON.parse(localStorage.getItem(USER_KEY) || 'null');
+        if (!base) return prev;
+        const updated = mergeProfileIntoUser(base, profileUser);
+        localStorage.setItem(USER_KEY, JSON.stringify(updated));
+        return updated;
+      });
+      return profileUser;
+    } catch (_) {
+      return null;
+    }
+  }, []);
+
+  const isAdmin = user?.isAdmin === true;
+  const isFamilyAccessPending = !isAdmin && user?.familyAccess === 'pending';
+
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, loading, isAuth: !!token, isAdmin: user?.isAdmin === true }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        token,
+        login,
+        logout,
+        refreshSession,
+        loading,
+        isAuth: !!token,
+        isAdmin,
+        isFamilyAccessPending,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

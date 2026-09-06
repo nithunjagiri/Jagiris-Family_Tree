@@ -19,6 +19,67 @@ async function getUserFamilies(userId) {
   return result.rows;
 }
 
+/**
+ * Shared Kutumbam archive: family with the most family_members rows (count > 0).
+ * @param {import('pg').Pool | import('pg').PoolClient} [runner]
+ * @returns {Promise<number|null>}
+ */
+async function findSharedFamilyId(runner = db) {
+  const result = await runner.query(
+    `SELECT family_id, COUNT(*)::int AS c
+     FROM family_members
+     WHERE family_id IS NOT NULL
+     GROUP BY family_id
+     HAVING COUNT(*) > 0
+     ORDER BY COUNT(*) DESC, family_id ASC
+     LIMIT 1`
+  );
+  const id = result.rows[0]?.family_id;
+  return id != null ? Number(id) : null;
+}
+
+/**
+ * @param {number} userId
+ * @param {'member'|'owner'} [role]
+ * @param {import('pg').Pool | import('pg').PoolClient} [runner]
+ * @returns {Promise<number|null>} shared family id joined, or null if none
+ */
+async function joinUserToSharedFamily(userId, role = 'member', runner = db) {
+  const sharedId = await findSharedFamilyId(runner);
+  if (sharedId == null) return null;
+  await runner.query(
+    `INSERT INTO family_memberships (user_id, family_id, role)
+     VALUES ($1::integer, $2::integer, $3)
+     ON CONFLICT (user_id, family_id) DO NOTHING`,
+    [Number(userId), sharedId, role]
+  );
+  return sharedId;
+}
+
+async function getUserFamilyAccess(userId) {
+  try {
+    const r = await db.query(
+      `SELECT COALESCE(family_access, 'approved') AS family_access
+       FROM users WHERE id = $1::integer`,
+      [Number(userId)]
+    );
+    const v = r.rows[0]?.family_access;
+    return v === 'pending' ? 'pending' : 'approved';
+  } catch (err) {
+    if (err.code === '42703') return 'approved';
+    throw err;
+  }
+}
+
+async function setUserFamilyAccess(userId, access) {
+  const value = access === 'pending' ? 'pending' : 'approved';
+  await db.query(`UPDATE users SET family_access = $1 WHERE id = $2::integer`, [
+    value,
+    Number(userId),
+  ]);
+  return value;
+}
+
 async function createDefaultFamilyForUser(client, userId, username) {
   const familyName = username ? `${username}'s Family` : `Family ${userId}`;
   const familyInsert = await client.query(
@@ -104,10 +165,8 @@ async function resolveFamilyContext(req, res, next) {
     if (requestedFamilyId) {
       const matched = enriched.find((m) => Number(m.family_id) === requestedFamilyId);
       if (!matched) {
-        // Stale or invalid header (e.g. old localStorage): fall back to the primary shared workspace.
         selected = primary || enriched[0];
       } else if (enriched.length > 1 && matched.member_count < maxCount) {
-        // Do not let a personal/small workspace hide the shared family tree when the user also belongs to a larger one.
         selected = primary;
       } else {
         selected = matched;
@@ -137,4 +196,9 @@ module.exports = {
   ensureUserHasDefaultFamily,
   getUserFamilies,
   resolveFamilyContext,
+  findSharedFamilyId,
+  joinUserToSharedFamily,
+  getUserFamilyAccess,
+  setUserFamilyAccess,
+  pickPrimaryFamily,
 };

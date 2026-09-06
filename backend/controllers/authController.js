@@ -3,7 +3,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const db = require('../database/db');
-const { ensureUserHasDefaultFamily } = require('../lib/familyAccess');
+const { ensureUserHasDefaultFamily, getUserFamilyAccess, setUserFamilyAccess } = require('../lib/familyAccess');
 const { isOtpMailConfigured, sendPasswordResetOtpEmail } = require('../lib/emailSend');
 
 function sha256Token(value) {
@@ -118,37 +118,67 @@ exports.register = async (req, res, next) => {
     let result;
     try {
       result = await db.query(
-        `INSERT INTO users (username, email, password, is_admin, first_name, last_name, gender, phone, date_of_birth)
-         VALUES ($1, $2, $3, false, $4, $5, $6, $7, $8)
+        `INSERT INTO users (username, email, password, is_admin, family_access, first_name, last_name, gender, phone, date_of_birth)
+         VALUES ($1, $2, $3, false, 'pending', $4, $5, $6, $7, $8)
          RETURNING id, username, email, created_at, COALESCE(is_admin, false) AS is_admin,
-           first_name, last_name, gender, phone, date_of_birth`,
+           first_name, last_name, gender, phone, date_of_birth,
+           COALESCE(family_access, 'pending') AS family_access`,
         [username, email, hashed, firstName, lastName, genderVal, phoneVal, dobVal]
       );
     } catch (err) {
       if (err.code === '42703') {
         try {
           result = await db.query(
-            `INSERT INTO users (username, email, password, is_admin)
-             VALUES ($1, $2, $3, false)
-             RETURNING id, username, email, created_at, COALESCE(is_admin, false) AS is_admin`,
-            [username, email, hashed]
+            `INSERT INTO users (username, email, password, is_admin, first_name, last_name, gender, phone, date_of_birth)
+             VALUES ($1, $2, $3, false, $4, $5, $6, $7, $8)
+             RETURNING id, username, email, created_at, COALESCE(is_admin, false) AS is_admin,
+               first_name, last_name, gender, phone, date_of_birth`,
+            [username, email, hashed, firstName, lastName, genderVal, phoneVal, dobVal]
           );
         } catch (err2) {
           if (err2.code === '42703') {
-            result = await db.query(
-              'INSERT INTO users (username, email, password) VALUES ($1, $2, $3) RETURNING id, username, email, created_at',
-              [username, email, hashed]
-            );
-            result.rows[0].is_admin = false;
+            try {
+              result = await db.query(
+                `INSERT INTO users (username, email, password, is_admin)
+                 VALUES ($1, $2, $3, false)
+                 RETURNING id, username, email, created_at, COALESCE(is_admin, false) AS is_admin`,
+                [username, email, hashed]
+              );
+            } catch (err3) {
+              if (err3.code === '42703') {
+                result = await db.query(
+                  'INSERT INTO users (username, email, password) VALUES ($1, $2, $3) RETURNING id, username, email, created_at',
+                  [username, email, hashed]
+                );
+                result.rows[0].is_admin = false;
+              } else throw err3;
+            }
           } else throw err2;
         }
       } else throw err;
     }
     const user = result.rows[0];
+    try {
+      await setUserFamilyAccess(user.id, 'pending');
+    } catch (e) {
+      if (e.code !== '42703') throw e;
+    }
     await ensureUserHasDefaultFamily(user.id, user.username);
     const isAdmin = user.is_admin === true || user.username === 'nithun';
+    const familyAccess = isAdmin ? 'approved' : 'pending';
     const token = jwt.sign({ id: user.id, username: user.username, isAdmin }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
-    res.status(201).json({ token, user: { id: user.id, username: user.username, email: user.email, isAdmin, first_name: null, last_name: null } });
+    res.status(201).json({
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        isAdmin,
+        familyAccess,
+        first_name: user.first_name || null,
+        last_name: user.last_name || null,
+      },
+    });
   } catch (err) {
     if (err.code === '23505') return res.status(400).json({ error: 'Username or email already exists' });
     next(err);
@@ -162,6 +192,8 @@ exports.login = async (req, res, next) => {
 
     const { username, password } = req.body;
     const loginSelects = [
+      `id, username, email, password, COALESCE(is_admin, false) AS is_admin, first_name, last_name, profile_photo,
+       COALESCE(family_access, 'approved') AS family_access`,
       'id, username, email, password, COALESCE(is_admin, false) AS is_admin, first_name, last_name, profile_photo',
       'id, username, email, password, COALESCE(is_admin, false) AS is_admin, first_name, last_name',
       'id, username, email, password, COALESCE(is_admin, false) AS is_admin',
@@ -194,6 +226,13 @@ exports.login = async (req, res, next) => {
 
     await ensureUserHasDefaultFamily(user.id, user.username);
     const isAdmin = user.is_admin === true || user.username === 'nithun';
+    let familyAccess = 'approved';
+    try {
+      familyAccess = await getUserFamilyAccess(user.id);
+    } catch (_) {
+      familyAccess = user.family_access === 'pending' ? 'pending' : 'approved';
+    }
+    if (isAdmin) familyAccess = 'approved';
     const token = jwt.sign({ id: user.id, username: user.username, isAdmin }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
     res.json({
       token,
@@ -202,6 +241,7 @@ exports.login = async (req, res, next) => {
         username: user.username,
         email: user.email,
         isAdmin,
+        familyAccess,
         first_name: user.first_name || null,
         last_name: user.last_name || null,
         profile_photo: user.profile_photo ?? null,

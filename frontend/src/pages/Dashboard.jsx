@@ -155,7 +155,7 @@ function StatTile({ label, value, hint, to, onClick, icon: Icon, accent }) {
 }
 
 export default function Dashboard() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isFamilyAccessPending, refreshSession } = useAuth();
   const location = useLocation();
   const [members, setMembers] = useState([]);
   const [recentPhotos, setRecentPhotos] = useState([]);
@@ -166,20 +166,39 @@ export default function Dashboard() {
   const [selectedBloodGroup, setSelectedBloodGroup] = useState('');
 
   useEffect(() => {
+    if (isFamilyAccessPending) {
+      refreshSession();
+    }
+  }, [isFamilyAccessPending, refreshSession]);
+
+  useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
-        const [membersRes, photosRes, eventsRes, announcementsRes] = await Promise.all([
-          familyMembersApi.list(),
-          photosApi.list(),
-          eventsApi.list(true),
-          notificationsApi.listAnnouncements({ limit: 8, offset: 0 }).catch(() => ({ data: { items: [] } })),
-        ]);
-        if (!cancelled) {
-          setMembers(membersRes.data || []);
-          setRecentPhotos((photosRes.data || []).slice(0, 6));
-          setUpcomingEvents((eventsRes.data || []).slice(0, 6));
-          setAnnouncements(announcementsRes.data?.items || []);
+        if (isFamilyAccessPending) {
+          const [membersRes, announcementsRes] = await Promise.all([
+            familyMembersApi.list(),
+            notificationsApi.listAnnouncements({ limit: 8, offset: 0 }).catch(() => ({ data: { items: [] } })),
+          ]);
+          if (!cancelled) {
+            setMembers(membersRes.data || []);
+            setRecentPhotos([]);
+            setUpcomingEvents([]);
+            setAnnouncements(announcementsRes.data?.items || []);
+          }
+        } else {
+          const [membersRes, photosRes, eventsRes, announcementsRes] = await Promise.all([
+            familyMembersApi.list(),
+            photosApi.list(),
+            eventsApi.list(true),
+            notificationsApi.listAnnouncements({ limit: 8, offset: 0 }).catch(() => ({ data: { items: [] } })),
+          ]);
+          if (!cancelled) {
+            setMembers(membersRes.data || []);
+            setRecentPhotos((photosRes.data || []).slice(0, 6));
+            setUpcomingEvents((eventsRes.data || []).slice(0, 6));
+            setAnnouncements(announcementsRes.data?.items || []);
+          }
         }
       } catch (_) {
         if (!cancelled) {
@@ -193,7 +212,7 @@ export default function Dashboard() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isFamilyAccessPending]);
 
   useEffect(() => {
     if (loading) return;
@@ -236,7 +255,7 @@ export default function Dashboard() {
         title: name,
         subtitle: 'Birthday',
         description: null,
-        to: `/family-members/${member.id}`,
+        to: isFamilyAccessPending ? null : `/family-members/${member.id}`,
         member,
       };
     });
@@ -252,7 +271,7 @@ export default function Dashboard() {
           title: e.title || 'Event',
           subtitle: 'Event',
           description: e.description || null,
-          to: `/events/${e.id}`,
+          to: isFamilyAccessPending ? null : `/events/${e.id}`,
           event: e,
         };
       })
@@ -261,7 +280,7 @@ export default function Dashboard() {
     return [...birthdayItems, ...eventItems]
       .sort((a, b) => a.dateYmd.localeCompare(b.dateYmd) || a.title.localeCompare(b.title))
       .slice(0, 12);
-  }, [birthdaysSoon, upcomingEvents]);
+  }, [birthdaysSoon, upcomingEvents, isFamilyAccessPending]);
 
   if (loading) {
     return (
@@ -286,6 +305,17 @@ export default function Dashboard() {
 
   return (
     <div className="mx-auto flex w-full max-w-[1920px] flex-col gap-8 pb-6">
+      {isFamilyAccessPending && (
+        <div
+          className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100"
+          role="status"
+        >
+          <p className="font-semibold">Waiting for admin approval</p>
+          <p className="mt-1 text-amber-900/90 dark:text-amber-100/90">
+            Your account is ready, but shared family modules stay locked until an administrator approves your access.
+          </p>
+        </div>
+      )}
       <div className="rounded-2xl border border-gray-200/80 bg-white px-5 py-4 shadow-soft dark:border-gray-800 dark:bg-gray-900 dark:shadow-soft-dark">
         <p className="text-lg font-semibold text-gray-900 dark:text-white">
           Welcome, {welcomeName}
@@ -301,14 +331,14 @@ export default function Dashboard() {
           label="Family members"
           value={membersCount}
           hint="People in your tree"
-          to="/family-members"
+          to={isFamilyAccessPending ? undefined : '/family-members'}
           icon={Users}
         />
         <StatTile
           label="Living"
           value={living}
           hint="With current records"
-          to="/family-members?status=living"
+          to={isFamilyAccessPending ? undefined : '/family-members?status=living'}
           icon={Activity}
           accent="bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400"
         />
@@ -316,7 +346,7 @@ export default function Dashboard() {
           label="Deceased"
           value={deceased}
           hint="Recorded as not alive"
-          to="/family-members?status=deceased"
+          to={isFamilyAccessPending ? undefined : '/family-members?status=deceased'}
           icon={Activity}
           accent="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
         />
@@ -324,7 +354,7 @@ export default function Dashboard() {
           label="Birthdays (60 days)"
           value={birthdaysSoon.length}
           hint="Upcoming celebrations"
-          onClick={() => scrollMainToElement('upcoming-events')}
+          onClick={isFamilyAccessPending ? undefined : () => scrollMainToElement('upcoming-events')}
           icon={Cake}
           accent="bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
         />
@@ -332,7 +362,7 @@ export default function Dashboard() {
           label="Members with blood group"
           value={bloodGroupStats.totalWithBloodGroup}
           hint={`${Math.max(0, membersCount - bloodGroupStats.totalWithBloodGroup)} pending blood group`}
-          onClick={() => scrollMainToElement('blood-groups-section')}
+          onClick={isFamilyAccessPending ? undefined : () => scrollMainToElement('blood-groups-section')}
           icon={Droplets}
           accent="bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400"
         />
@@ -604,17 +634,21 @@ export default function Dashboard() {
               </span>
               <h2 className="text-base font-semibold text-gray-900 dark:text-white">Recent photos</h2>
             </div>
-            <Link
-              to="/gallery"
-              className="text-sm font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400"
-            >
-              View all
-            </Link>
+            {!isFamilyAccessPending && (
+              <Link
+                to="/gallery"
+                className="text-sm font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400"
+              >
+                View all
+              </Link>
+            )}
           </div>
           <div className="grid grid-cols-3 gap-2 p-4 sm:grid-cols-3">
             {recentPhotos.length === 0 ? (
               <p className="col-span-full py-10 text-center text-sm text-gray-500 dark:text-gray-400">
-                No photos yet — add some in the gallery.
+                {isFamilyAccessPending
+                  ? 'Gallery unlocks after admin approval.'
+                  : 'No photos yet — add some in the gallery.'}
               </p>
             ) : (
               recentPhotos.map((p) => (
@@ -638,12 +672,14 @@ export default function Dashboard() {
               </span>
               <h2 className="text-base font-semibold text-gray-900 dark:text-white">Upcoming events & birthdays</h2>
             </div>
-            <Link
-              to="/events?tab=birthdays"
-              className="text-sm font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400"
-            >
-              View all
-            </Link>
+            {!isFamilyAccessPending && (
+              <Link
+                to="/events?tab=birthdays"
+                className="text-sm font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400"
+              >
+                View all
+              </Link>
+            )}
           </div>
           <ul className="divide-y divide-gray-100 dark:divide-gray-800">
             {upcomingTimeline.length === 0 ? (
@@ -654,17 +690,8 @@ export default function Dashboard() {
               upcomingTimeline.map((item) => {
                 const evParts = eventCalendarParts(item.dateYmd);
                 const occasionTiming = absoluteOccasionTiming(item.dateYmd);
-                return (
-                <li key={item.key} className="flex gap-4 px-5 py-4">
-                  <Link
-                    to={item.to}
-                    state={
-                      item.type === 'event'
-                        ? { returnTo: '/', event: item.event }
-                        : undefined
-                    }
-                    className="flex min-w-0 flex-1 gap-4"
-                  >
+                const rowBody = (
+                  <>
                     <div className="flex w-10 shrink-0 flex-col items-center border-r border-gray-100 pr-4 dark:border-gray-800">
                       <span className="text-[10px] font-semibold uppercase tracking-wide text-primary-600 dark:text-primary-400">
                         {evParts?.monthShort ?? '—'}
@@ -682,7 +709,25 @@ export default function Dashboard() {
                         <p className="mt-1 line-clamp-2 text-sm text-gray-600 dark:text-gray-300">{item.description}</p>
                       )}
                     </div>
-                  </Link>
+                  </>
+                );
+                return (
+                <li key={item.key} className="flex gap-4 px-5 py-4">
+                  {item.to ? (
+                    <Link
+                      to={item.to}
+                      state={
+                        item.type === 'event'
+                          ? { returnTo: '/', event: item.event }
+                          : undefined
+                      }
+                      className="flex min-w-0 flex-1 gap-4"
+                    >
+                      {rowBody}
+                    </Link>
+                  ) : (
+                    <div className="flex min-w-0 flex-1 gap-4">{rowBody}</div>
+                  )}
                   <div className="flex shrink-0 flex-col items-end justify-center gap-1.5 self-center">
                     {item.type === 'birthday' && item.member && occasionTiming ? (
                       <WishActions
@@ -706,17 +751,19 @@ export default function Dashboard() {
                         )}
                       />
                     ) : null}
-                    <Link
-                      to={item.to}
-                      state={
-                        item.type === 'event'
-                          ? { returnTo: '/', event: item.event }
-                          : undefined
-                      }
-                      className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-                    >
-                      View
-                    </Link>
+                    {item.to ? (
+                      <Link
+                        to={item.to}
+                        state={
+                          item.type === 'event'
+                            ? { returnTo: '/', event: item.event }
+                            : undefined
+                        }
+                        className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                      >
+                        View
+                      </Link>
+                    ) : null}
                   </div>
                 </li>
                 );

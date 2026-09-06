@@ -54,6 +54,20 @@ function PrivateRoute({ children }) {
   return children;
 }
 
+function PendingFamilyAccessGuard({ children }) {
+  const { isFamilyAccessPending, loading, isAuth } = useAuth();
+  const { pathname } = useLocation();
+  if (!loading && isAuth && isFamilyAccessPending) {
+    const allowed =
+      pathname === '/' ||
+      pathname.startsWith('/account') ||
+      pathname.startsWith('/contact') ||
+      pathname === '/privacy-policy';
+    if (!allowed) return <Navigate to="/" replace />;
+  }
+  return children;
+}
+
 function AdminRoute({ children }) {
   const { isAdmin, loading, isAuth } = useAuth();
   if (loading || !isAuth) {
@@ -122,7 +136,9 @@ export default function App() {
         path="/"
         element={
           <PrivateRoute>
-            <Layout />
+            <PendingFamilyAccessGuard>
+              <Layout />
+            </PendingFamilyAccessGuard>
           </PrivateRoute>
         }
       >

@@ -25,11 +25,15 @@ const adminAnnouncementsNav = {
 };
 
 export default function Sidebar({ open, onClose }) {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isFamilyAccessPending } = useAuth();
   const { pathname } = useLocation();
-  const nav = isAdmin
-    ? [...baseNav, adminAnnouncementsNav, { to: '/admin/users', label: 'Admin portal', icon: Shield, adminPortal: true }]
+  const pendingAllowed = new Set(['/', '/contact', '/account']);
+  const filteredBase = isFamilyAccessPending
+    ? baseNav.filter((item) => pendingAllowed.has(item.to))
     : baseNav;
+  const nav = isAdmin
+    ? [...filteredBase, adminAnnouncementsNav, { to: '/admin/users', label: 'Admin portal', icon: Shield, adminPortal: true }]
+    : filteredBase;
   return (
     <>
       {open && (
